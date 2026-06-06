@@ -1,23 +1,27 @@
 """Word (DOCX) ICD generator using python-docx.
 
 Follows a standard aviation ICD structure: cover page, revision history,
-interface overview, per-interface signal tables, and notes. The provenance
-stamp is written into the page footer for tool-qualification evidence.
+interface overview, per-interface/packet signal tables, and notes. The page is
+landscape so the full signal field set fits. The provenance stamp is written
+into the page footer for tool-qualification evidence.
 """
 from __future__ import annotations
 
 from docx import Document
-from docx.enum.section import WD_SECTION
+from docx.enum.section import WD_ORIENT
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt, RGBColor, Inches
 
+from .fields import SIGNAL_FIELDS
 from .model import IcdModel
 from .provenance import Provenance
 
 _HEADER_BLUE = RGBColor(0x1F, 0x4E, 0x79)
-_SIGNAL_COLS = ["Signal", "Type", "Units", "Rate (Hz)", "Min", "Max",
-                "Data Bits", "Xmit Bits", "Xmit Bytes", "Scale", "Description"]
+
+# Full signal column set, sourced from the registry so the document can never
+# silently omit a field. (label, attribute-name) in registry order.
+_SIGNAL_COLS = [(f.label, f.name) for f in SIGNAL_FIELDS]
 
 
 def _set_footer(section, prov: Provenance) -> None:
@@ -43,13 +47,30 @@ def _shade_header_row(row) -> None:
             for run in para.runs:
                 run.font.bold = True
                 run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                run.font.size = Pt(8)
+                run.font.size = Pt(7)
+
+
+def _cell(value) -> str:
+    """Render any field value into a document cell string."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "Y" if value else "N"
+    if isinstance(value, float):
+        return str(int(value)) if value == int(value) else repr(value)
+    return str(value)
 
 
 def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
     doc = Document()
 
-    # Base font.
+    # Landscape so the full signal field set fits across the page.
+    section = doc.sections[0]
+    section.orientation = WD_ORIENT.LANDSCAPE
+    section.page_width, section.page_height = section.page_height, section.page_width
+    section.left_margin = Inches(0.5)
+    section.right_margin = Inches(0.5)
+
     style = doc.styles["Normal"]
     style.font.name = "Arial"
     style.font.size = Pt(10)
@@ -122,7 +143,7 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
         cells[4].text = iface.source_lru
         cells[5].text = iface.destination_lru
 
-    # ---- Per-interface signal tables ----
+    # ---- Per-interface / per-packet signal tables (FULL field set) ----
     doc.add_heading("Interface Definitions", level=1)
     for iface in model.interfaces:
         doc.add_heading(f"{iface.id} \u2014 {iface.name}", level=2)
@@ -145,23 +166,17 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
 
             tbl = doc.add_table(rows=1, cols=len(_SIGNAL_COLS))
             tbl.style = "Table Grid"
-            for i, label in enumerate(_SIGNAL_COLS):
-                tbl.rows[0].cells[i].paragraphs[0].add_run(label)
+            for i, (label, _attr) in enumerate(_SIGNAL_COLS):
+                cell = tbl.rows[0].cells[i]
+                cell.paragraphs[0].add_run(label)
             _shade_header_row(tbl.rows[0])
             for sig in pkt.signals:
                 cells = tbl.add_row().cells
-                vals = [
-                    sig.name, sig.signal_type, sig.units or "",
-                    _fmt(sig.update_rate_hz),
-                    _fmt(sig.range_min), _fmt(sig.range_max),
-                    _int(sig.data_bits), _int(sig.xmit_bits), _int(sig.xmit_bytes),
-                    _fmt(sig.scaling), sig.description or "",
-                ]
-                for i, val in enumerate(vals):
-                    cells[i].text = val
+                for i, (_label, attr) in enumerate(_SIGNAL_COLS):
+                    cells[i].text = _cell(getattr(sig, attr))
                     for para in cells[i].paragraphs:
                         for run in para.runs:
-                            run.font.size = Pt(8)
+                            run.font.size = Pt(7)
 
     # ---- Notes ----
     doc.add_heading("Notes", level=1)
@@ -175,10 +190,9 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
         "3. All signal ranges are expressed in the stated physical units "
         "prior to encoding/scaling unless otherwise noted.")
 
-    # Footer on every section.
     for section in doc.sections:
         _set_footer(section, prov)
-    # Pin core-properties timestamps to a fixed epoch for determinism.
+
     import datetime
     epoch = datetime.datetime(2000, 1, 1, 0, 0, 0)
     doc.core_properties.created = epoch
@@ -188,15 +202,3 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
     doc.save(path)
     from .ooxml_determinism import normalize
     normalize(path)
-
-
-def _int(x):
-    """Format an optional integer cell; blank when absent."""
-    return "" if x is None else str(x)
-
-
-def _fmt(x: float) -> str:
-    # Stable numeric formatting: integers without trailing .0.
-    if x == int(x):
-        return str(int(x))
-    return repr(x)

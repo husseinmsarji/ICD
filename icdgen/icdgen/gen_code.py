@@ -1,8 +1,9 @@
-"""Source-code artifact generators: C/C++ header and Simulink bus script.
+"""Source-code artifact generators: C header and Simulink bus script.
 
-Both are pure template renders over the canonical model, making them trivially
-deterministic. The C `{` / `}` collisions with Jinja are handled by passing
-literal_open / literal_close into the context rather than escaping braces.
+The C header targets MISRA C:2012: fixed-width
+types, fully parenthesized macro bodies, and integer-constant suffixes (U for
+unsigned). Both generators are pure template renders over the canonical model,
+making them trivially deterministic.
 """
 from __future__ import annotations
 
@@ -10,10 +11,16 @@ import re
 
 from jinja2 import Environment, FileSystemLoader
 
-from .model import IcdModel, Interface, Packet
+from .model import IcdModel, Interface, Packet, Signal
 from .provenance import Provenance
 
 from .resources import template_dir as _template_dir
+
+# Signal types whose C representation is unsigned -> integer constants need a
+# 'U' suffix to satisfy MISRA C:2012 Rule 7.2.
+_UNSIGNED_TYPES = {"bool", "uint8", "uint16", "uint32", "uint64"}
+# 64-bit types take an 'LL'/'ULL' suffix so the literal's type matches the field.
+_LONGLONG_TYPES = {"uint64", "int64"}
 
 
 def _env() -> Environment:
@@ -52,6 +59,34 @@ def _packet_bus_name(iface: Interface, pkt: Packet) -> str:
             f"_{re.sub(r'[^A-Za-z0-9]', '_', pkt.name)}")
 
 
+def _float_const(x: float) -> str:
+    """MISRA-safe floating constant: always has a decimal point and 'F' suffix
+    (Rule 7.2/7.4 — a float literal used in float context should be typed)."""
+    if x == int(x):
+        return f"{int(x)}.0F"
+    return f"{repr(x)}F"
+
+
+def _num_const(sig: Signal, x: float) -> str:
+    """Render a range bound as a constant whose suffix matches the field type.
+
+    Integer-typed signals get integer literals (with U/LL suffixes as needed);
+    float-typed signals get float literals. Range values are authored as
+    numbers, so for integer signals we emit the integer form when the value is
+    whole, else fall back to a float literal.
+    """
+    is_int_type = sig.signal_type not in {"float32", "float64"}
+    if is_int_type and x == int(x):
+        lit = str(int(x))
+        suffix = ""
+        if sig.signal_type in _UNSIGNED_TYPES:
+            suffix += "U"
+        if sig.signal_type in _LONGLONG_TYPES:
+            suffix += "LL"
+        return f"{lit}{suffix}"
+    return _float_const(x)
+
+
 def render_header(model: IcdModel, prov: Provenance) -> str:
     guard = f"ICD_{_sanitize_upper(model.metadata.document_id)}_H"
     tmpl = _env().get_template("header.h.j2")
@@ -59,6 +94,7 @@ def render_header(model: IcdModel, prov: Provenance) -> str:
         model=model, prov=prov, guard=guard,
         prefix=_prefix, struct_name=_struct_name,
         packet_struct_name=_packet_struct_name,
+        num_const=_num_const, float_const=_float_const,
         literal_open="{", literal_close="}",
     )
 
