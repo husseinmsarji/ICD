@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "icdgen"
+version = "1.1.0"
+description = "Deterministic ICD artifact generator for certifiable avionics (ARP4754A / DO-178C / DO-254)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "Avionics Systems Engineering" }]
+# Exact pins: output must be byte-reproducible, so dependency versions are
+# locked to those that produced the verified deterministic baseline. See
+# requirements.txt and AI_README "Determinism contract" before bumping.
+dependencies = [
+    "lxml==6.0.2",
+    "jsonschema==4.26.0",
+    "python-docx==1.2.0",
+    "reportlab==4.4.10",
+    "Jinja2==3.1.6",
+    "openpyxl==3.1.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyinstaller>=6"]  # dev tools do not affect output bytes
+
+[project.scripts]
+icdgen = "icdgen.cli:main"
+
+[tool.setuptools]
+packages = ["icdgen"]
+
+[tool.setuptools.package-data]
+icdgen = ["templates/*.j2", "schemas/*.xsd", "schemas/*.template"]
+
+# Note: the XSD lives in schemas/ at the repo root for source runs and is
+# bundled explicitly by icdgen.spec for the PyInstaller build. For a pip
+# install, ship it inside the package by also copying it under icdgen/ if you
+# prefer; resources.py resolves both layouts.

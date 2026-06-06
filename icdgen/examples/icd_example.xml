@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">
+  <metadata>
+    <documentId>ICD-FCC-NAV-001</documentId>
+    <documentTitle>Flight Control Computer to Navigation System Interface</documentTitle>
+    <program>eVTOL-Gen6</program>
+    <revision>B</revision>
+    <revisionDate>2026-05-01</revisionDate>
+    <author>H. Avionics</author>
+    <revisionHistory>
+      <entry>
+        <revision>A</revision>
+        <date>2026-02-10</date>
+        <author>H. Avionics</author>
+        <description>Initial release.</description>
+      </entry>
+      <entry>
+        <revision>B</revision>
+        <date>2026-05-01</date>
+        <author>H. Avionics</author>
+        <description>Added barometric altitude; tightened airspeed rate.</description>
+      </entry>
+    </revisionHistory>
+  </metadata>
+  <interfaces>
+    <interface id="IF-NAV-STATE" busType="ARINC664" dal="A">
+      <name>Navigation State Bus</name>
+      <sourceLru>NAV-COMPUTER</sourceLru>
+      <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
+      <owningDocument>ICD-FCC-NAV-001</owningDocument>
+      <description>Primary navigation state delivered to the FCC at 50 Hz.</description>
+      <signals>
+        <signal name="latitude" dataType="float64" direction="TX">
+          <units>deg</units>
+          <rangeMin>-90.0</rangeMin>
+          <rangeMax>90.0</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <encoding>IEEE754</encoding>
+          <description>WGS-84 geodetic latitude.</description>
+        </signal>
+        <signal name="longitude" dataType="float64" direction="TX">
+          <units>deg</units>
+          <rangeMin>-180.0</rangeMin>
+          <rangeMax>180.0</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <encoding>IEEE754</encoding>
+          <description>WGS-84 geodetic longitude.</description>
+        </signal>
+        <signal name="true_airspeed" dataType="float32" direction="TX">
+          <units>m/s</units>
+          <rangeMin>0.0</rangeMin>
+          <rangeMax>120.0</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <description>True airspeed estimate.</description>
+        </signal>
+        <signal name="nav_valid" dataType="bool" direction="TX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <description>Navigation solution validity flag.</description>
+        </signal>
+      </signals>
+    </interface>
+    <interface id="IF-FCC-CMD" busType="ARINC429" dal="A">
+      <name>Flight Control Command</name>
+      <sourceLru>FLIGHT-CONTROL-COMPUTER</sourceLru>
+      <destinationLru>MOTOR-CONTROLLER</destinationLru>
+      <owningDocument>ICD-FCC-NAV-001</owningDocument>
+      <signals>
+        <signal name="rotor_speed_cmd" dataType="uint16" direction="TX">
+          <units>rpm</units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>6000</rangeMax>
+          <updateRateHz>100</updateRateHz>
+          <scaling>0.5</scaling>
+          <description>Commanded rotor speed.</description>
+        </signal>
+        <signal name="motor_enable" dataType="bool" direction="TX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1</rangeMax>
+          <updateRateHz>100</updateRateHz>
+        </signal>
+      </signals>
+    </interface>
+  </interfaces>
+</icd>

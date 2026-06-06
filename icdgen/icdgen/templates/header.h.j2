@@ -1,0 +1,41 @@
+/*
+ * ============================================================================
+{% for line in prov.banner_lines() %} * {{ line }}
+{% endfor %} * ============================================================================
+ * Document: {{ model.metadata.document_id }} rev {{ model.metadata.revision }}
+ */
+#ifndef {{ guard }}
+#define {{ guard }}
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {{ literal_open }}
+#endif
+
+{% for iface in model.interfaces %}
+/* ---------------------------------------------------------------------------
+ * Interface: {{ iface.name }} (ID {{ iface.id }})
+ *   Bus: {{ iface.bus_type }}   DAL: {{ iface.dal }}
+ *   {{ iface.source_lru }} -> {{ iface.destination_lru }}
+ *   Owning document: {{ iface.owning_document }}
+ * ------------------------------------------------------------------------- */
+{% for sig in iface.signals %}
+/* {{ sig.name }}: {{ sig.units or "n/a" }}, range [{{ sig.range_min }}, {{ sig.range_max }}], {{ sig.update_rate_hz }} Hz, {{ sig.direction }}{% if sig.optional %}, optional{% endif %} */
+#define {{ prefix(iface) }}_{{ sig.name | upper }}_MIN   ({{ sig.range_min }})
+#define {{ prefix(iface) }}_{{ sig.name | upper }}_MAX   ({{ sig.range_max }})
+#define {{ prefix(iface) }}_{{ sig.name | upper }}_SCALE  ({{ sig.scaling }})
+#define {{ prefix(iface) }}_{{ sig.name | upper }}_OFFSET ({{ sig.offset }})
+#define {{ prefix(iface) }}_{{ sig.name | upper }}_RATE_HZ ({{ sig.update_rate_hz }})
+{% endfor %}
+
+typedef struct {{ literal_open }}
+{% for sig in iface.signals %}    {{ sig.c_type }} {{ sig.name }}; /* {{ sig.units or "n/a" }}{% if sig.optional %} (optional){% endif %} */
+{% endfor %}{{ literal_close }} {{ struct_name(iface) }};
+
+{% endfor %}
+#ifdef __cplusplus
+{{ literal_close }}
+#endif
+
+#endif /* {{ guard }} */

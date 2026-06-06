@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ICD Interface Definition Schema
+  Schema version: 1.0
+  Namespace is versioned so future revisions (1.1, 2.0) can coexist without
+  breaking input files authored against 1.0.
+
+  Extensibility contract:
+    * Additive-only within a major version: new OPTIONAL elements/attributes
+      may be added in a minor revision. Required fields are never added in a
+      minor revision (that would break existing files), only in a major bump.
+    * <extensions> is a forward-compatibility escape hatch (lax processing):
+      programs may carry custom payload there without a schema change.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns="urn:icdgen:icd:1.0"
+           targetNamespace="urn:icdgen:icd:1.0"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <!-- ============ Root ============ -->
+  <xs:element name="icd" type="IcdType"/>
+
+  <xs:complexType name="IcdType">
+    <xs:sequence>
+      <xs:element name="metadata" type="MetadataType"/>
+      <xs:element name="interfaces" type="InterfacesType"/>
+      <xs:element name="extensions" type="ExtensionsType" minOccurs="0"/>
+    </xs:sequence>
+    <!-- schemaVersion is pinned so the tool can reject mismatched inputs -->
+    <xs:attribute name="schemaVersion" type="SchemaVersionType" use="required"/>
+  </xs:complexType>
+
+  <xs:simpleType name="SchemaVersionType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="1\.[0-9]+"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- ============ Metadata / revision ============ -->
+  <xs:complexType name="MetadataType">
+    <xs:sequence>
+      <xs:element name="documentId" type="NonEmptyString"/>
+      <xs:element name="documentTitle" type="NonEmptyString"/>
+      <xs:element name="program" type="NonEmptyString"/>
+      <xs:element name="revision" type="NonEmptyString"/>
+      <xs:element name="revisionDate" type="xs:date"/>
+      <xs:element name="author" type="NonEmptyString"/>
+      <xs:element name="revisionHistory" type="RevisionHistoryType"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RevisionHistoryType">
+    <xs:sequence>
+      <xs:element name="entry" type="RevisionEntryType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RevisionEntryType">
+    <xs:sequence>
+      <xs:element name="revision" type="NonEmptyString"/>
+      <xs:element name="date" type="xs:date"/>
+      <xs:element name="author" type="NonEmptyString"/>
+      <xs:element name="description" type="NonEmptyString"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ============ Interfaces ============ -->
+  <xs:complexType name="InterfacesType">
+    <xs:sequence>
+      <xs:element name="interface" type="InterfaceType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- @INTERFACE_TYPE@ -->
+
+  <xs:complexType name="SignalsType">
+    <xs:sequence>
+      <xs:element name="signal" type="SignalType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- @SIGNAL_TYPES@ -->
+
+  <!-- ============ Extensions escape hatch ============ -->
+  <xs:complexType name="ExtensionsType">
+    <xs:sequence>
+      <xs:any processContents="lax" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ============ Simple types / enumerations ============ -->
+  <xs:simpleType name="NonEmptyString">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+
+
+
+
+
+
+
+  <!-- @ENUM_TYPES@ -->
+
+</xs:schema>

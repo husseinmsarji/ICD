@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DEMONSTRATION ICD — exercises the full capability of icdgen:
+    * All six bus types (ARINC664, ARINC429, MIL-STD-1553, CAN, DISCRETE, ANALOG)
+    * All DAL levels A through E across interfaces
+    * Every numeric data type (bool, signed/unsigned 8..64, float32/float64)
+    * TX and RX directions
+    * Optional signals, scaling, offset, encoding annotations
+    * Multi-entry revision history
+  This file is schema-valid against urn:icdgen:icd:1.0 and is intended as a
+  showcase input for generate/diff.
+-->
+<icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">
+  <metadata>
+    <documentId>ICD-EVTOL-DEMO-100</documentId>
+    <documentTitle>eVTOL Integrated Avionics Interface Control Document</documentTitle>
+    <program>eVTOL-Gen6-Demonstrator</program>
+    <revision>C</revision>
+    <revisionDate>2026-06-01</revisionDate>
+    <author>H. Avionics</author>
+    <revisionHistory>
+      <entry>
+        <revision>A</revision>
+        <date>2026-01-15</date>
+        <author>H. Avionics</author>
+        <description>Initial release covering FCC-to-NAV and motor command buses.</description>
+      </entry>
+      <entry>
+        <revision>B</revision>
+        <date>2026-03-22</date>
+        <author>H. Avionics</author>
+        <description>Added battery management (CAN), weight-on-wheels discretes, and pitot analog inputs.</description>
+      </entry>
+      <entry>
+        <revision>C</revision>
+        <date>2026-06-01</date>
+        <author>H. Avionics</author>
+        <description>Added MIL-STD-1553 mission bus; tightened airspeed update rate; documented redundant nav source.</description>
+      </entry>
+    </revisionHistory>
+  </metadata>
+
+  <interfaces>
+    <!-- DAL A, ARINC 664 / AFDX: primary navigation state -->
+    <interface id="IF-NAV-STATE" busType="ARINC664" dal="A">
+      <name>Navigation State Bus</name>
+      <sourceLru>NAV-COMPUTER</sourceLru>
+      <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
+      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <description>Primary navigation solution published to the FCC at 50 Hz over AFDX virtual link VL-101.</description>
+      <signals>
+        <signal name="latitude" dataType="float64" direction="TX">
+          <units>deg</units>
+          <rangeMin>-90.0</rangeMin>
+          <rangeMax>90.0</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <encoding>IEEE754</encoding>
+          <description>WGS-84 geodetic latitude.</description>
+        </signal>
+        <signal name="longitude" dataType="float64" direction="TX">
+          <units>deg</units>
+          <rangeMin>-180.0</rangeMin>
+          <rangeMax>180.0</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <encoding>IEEE754</encoding>
+          <description>WGS-84 geodetic longitude.</description>
+        </signal>
+        <signal name="altitude_msl" dataType="float32" direction="TX">
+          <units>m</units>
+          <rangeMin>-500.0</rangeMin>
+          <rangeMax>6000.0</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <description>Altitude above mean sea level.</description>
+        </signal>
+        <signal name="true_airspeed" dataType="float32" direction="TX">
+          <units>m/s</units>
+          <rangeMin>0.0</rangeMin>
+          <rangeMax>120.0</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <description>True airspeed estimate.</description>
+        </signal>
+        <signal name="nav_source_id" dataType="uint8" direction="TX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>3</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <description>Active navigation source: 0=GPS,1=INS,2=blended,3=degraded.</description>
+        </signal>
+        <signal name="nav_valid" dataType="bool" direction="TX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1</rangeMax>
+          <updateRateHz>50</updateRateHz>
+          <description>Navigation solution validity flag.</description>
+        </signal>
+        <signal name="figure_of_merit" dataType="uint16" direction="TX" optional="true">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1000</rangeMax>
+          <updateRateHz>10</updateRateHz>
+          <description>Optional navigation quality metric; absent on legacy nav units.</description>
+        </signal>
+      </signals>
+    </interface>
+
+    <!-- DAL A, ARINC 429: motor/rotor command -->
+    <interface id="IF-FCC-MOTOR-CMD" busType="ARINC429" dal="A">
+      <name>Motor Command Bus</name>
+      <sourceLru>FLIGHT-CONTROL-COMPUTER</sourceLru>
+      <destinationLru>MOTOR-CONTROLLER-1</destinationLru>
+      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <description>Per-rotor speed and torque commands at 100 Hz; ARINC 429 high-speed.</description>
+      <signals>
+        <signal name="rotor_speed_cmd" dataType="uint16" direction="TX">
+          <units>rpm</units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>6000</rangeMax>
+          <updateRateHz>100</updateRateHz>
+          <scaling>0.5</scaling>
+          <encoding>BNR</encoding>
+          <description>Commanded rotor speed; 0.5 rpm per LSB.</description>
+        </signal>
+        <signal name="torque_limit" dataType="int16" direction="TX">
+          <units>N*m</units>
+          <rangeMin>-400</rangeMin>
+          <rangeMax>400</rangeMax>
+          <updateRateHz>100</updateRateHz>
+          <scaling>0.1</scaling>
+          <offset>0.0</offset>
+          <encoding>BNR</encoding>
+          <description>Signed torque limit; 0.1 N*m per LSB.</description>
+        </signal>
+        <signal name="motor_enable" dataType="bool" direction="TX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1</rangeMax>
+          <updateRateHz>100</updateRateHz>
+          <description>Motor channel enable.</description>
+        </signal>
+        <signal name="motor_temp_fb" dataType="int8" direction="RX">
+          <units>degC</units>
+          <rangeMin>-40</rangeMin>
+          <rangeMax>125</rangeMax>
+          <updateRateHz>20</updateRateHz>
+          <description>Motor winding temperature feedback.</description>
+        </signal>
+      </signals>
+    </interface>
+
+    <!-- DAL B, MIL-STD-1553: mission/redundant bus -->
+    <interface id="IF-MISSION-1553" busType="MIL-STD-1553" dal="B">
+      <name>Mission Computer Bus</name>
+      <sourceLru>MISSION-COMPUTER</sourceLru>
+      <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
+      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <description>Mission-level commands and redundant nav cross-check over MIL-STD-1553B, RT address 5.</description>
+      <signals>
+        <signal name="waypoint_index" dataType="uint16" direction="TX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>65535</rangeMax>
+          <updateRateHz>5</updateRateHz>
+          <description>Active waypoint index in the loaded flight plan.</description>
+        </signal>
+        <signal name="commanded_alt" dataType="int32" direction="TX">
+          <units>m</units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>6000</rangeMax>
+          <updateRateHz>5</updateRateHz>
+          <description>Commanded target altitude.</description>
+        </signal>
+        <signal name="mission_clock" dataType="uint64" direction="TX">
+          <units>us</units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1.8446744073709552e19</rangeMax>
+          <updateRateHz>1</updateRateHz>
+          <description>Mission elapsed time in microseconds since arming.</description>
+        </signal>
+        <signal name="redundant_lat" dataType="float64" direction="RX" optional="true">
+          <units>deg</units>
+          <rangeMin>-90.0</rangeMin>
+          <rangeMax>90.0</rangeMax>
+          <updateRateHz>5</updateRateHz>
+          <description>Optional cross-check latitude from the mission computer's nav source.</description>
+        </signal>
+      </signals>
+    </interface>
+
+    <!-- DAL C, CAN: battery management -->
+    <interface id="IF-BMS-CAN" busType="CAN" dal="C">
+      <name>Battery Management Bus</name>
+      <sourceLru>BATTERY-MGMT-SYSTEM</sourceLru>
+      <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
+      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <description>Pack-level battery telemetry over CAN 2.0B at 500 kbit/s.</description>
+      <signals>
+        <signal name="pack_voltage" dataType="uint16" direction="RX">
+          <units>V</units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>900</rangeMax>
+          <updateRateHz>10</updateRateHz>
+          <scaling>0.01</scaling>
+          <description>Pack terminal voltage; 10 mV per LSB.</description>
+        </signal>
+        <signal name="pack_current" dataType="int16" direction="RX">
+          <units>A</units>
+          <rangeMin>-500</rangeMin>
+          <rangeMax>500</rangeMax>
+          <updateRateHz>10</updateRateHz>
+          <scaling>0.1</scaling>
+          <description>Pack current; positive = discharge.</description>
+        </signal>
+        <signal name="state_of_charge" dataType="uint8" direction="RX">
+          <units>%</units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>100</rangeMax>
+          <updateRateHz>1</updateRateHz>
+          <description>Estimated state of charge.</description>
+        </signal>
+        <signal name="cell_temp_max" dataType="int8" direction="RX">
+          <units>degC</units>
+          <rangeMin>-40</rangeMin>
+          <rangeMax>85</rangeMax>
+          <updateRateHz>2</updateRateHz>
+          <description>Hottest cell temperature in the pack.</description>
+        </signal>
+        <signal name="bms_fault" dataType="bool" direction="RX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1</rangeMax>
+          <updateRateHz>10</updateRateHz>
+          <description>Aggregate battery fault flag.</description>
+        </signal>
+      </signals>
+    </interface>
+
+    <!-- DAL D, DISCRETE: weight-on-wheels and door states -->
+    <interface id="IF-DISCRETE-IO" busType="DISCRETE" dal="D">
+      <name>Airframe Discrete I/O</name>
+      <sourceLru>AIRFRAME-SENSORS</sourceLru>
+      <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
+      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <description>Hardwired discrete inputs sampled at 20 Hz.</description>
+      <signals>
+        <signal name="weight_on_wheels" dataType="bool" direction="RX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1</rangeMax>
+          <updateRateHz>20</updateRateHz>
+          <description>True when airframe weight is on the landing gear.</description>
+        </signal>
+        <signal name="cabin_door_closed" dataType="bool" direction="RX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1</rangeMax>
+          <updateRateHz>20</updateRateHz>
+          <description>Cabin door latched-and-closed discrete.</description>
+        </signal>
+        <signal name="estop_engaged" dataType="bool" direction="RX">
+          <units></units>
+          <rangeMin>0</rangeMin>
+          <rangeMax>1</rangeMax>
+          <updateRateHz>20</updateRateHz>
+          <description>Emergency-stop hardware discrete.</description>
+        </signal>
+      </signals>
+    </interface>
+
+    <!-- DAL E, ANALOG: non-essential cabin/ambient sensing -->
+    <interface id="IF-ANALOG-ENV" busType="ANALOG" dal="E">
+      <name>Cabin Environment Analog</name>
+      <sourceLru>ENV-SENSOR-PANEL</sourceLru>
+      <destinationLru>CABIN-DISPLAY-UNIT</destinationLru>
+      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <description>Non-essential cabin comfort sensing; analog 0-5 V inputs.</description>
+      <signals>
+        <signal name="cabin_temp" dataType="float32" direction="RX">
+          <units>degC</units>
+          <rangeMin>-10.0</rangeMin>
+          <rangeMax>50.0</rangeMax>
+          <updateRateHz>1</updateRateHz>
+          <scaling>12.0</scaling>
+          <offset>-10.0</offset>
+          <encoding>linear-0-5V</encoding>
+          <description>Cabin temperature; 0-5 V maps to -10..50 degC.</description>
+        </signal>
+        <signal name="cabin_humidity" dataType="float32" direction="RX" optional="true">
+          <units>%</units>
+          <rangeMin>0.0</rangeMin>
+          <rangeMax>100.0</rangeMax>
+          <updateRateHz>1</updateRateHz>
+          <scaling>20.0</scaling>
+          <offset>0.0</offset>
+          <encoding>linear-0-5V</encoding>
+          <description>Optional cabin relative humidity.</description>
+        </signal>
+      </signals>
+    </interface>
+  </interfaces>
+</icd>

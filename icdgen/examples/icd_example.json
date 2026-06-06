@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "metadata": {
+    "documentId": "ICD-FCC-NAV-001",
+    "documentTitle": "FCC to Navigation Interface",
+    "program": "eVTOL-Gen6",
+    "revision": "B",
+    "revisionDate": "2026-05-01",
+    "author": "H. Avionics",
+    "revisionHistory": [
+      {"revision": "A", "date": "2026-02-10", "author": "H. Avionics", "description": "Initial release."}
+    ]
+  },
+  "interfaces": [
+    {
+      "id": "IF-NAV-STATE", "busType": "ARINC664", "dal": "A",
+      "name": "Navigation State Bus",
+      "sourceLru": "NAV-COMPUTER", "destinationLru": "FLIGHT-CONTROL-COMPUTER",
+      "owningDocument": "ICD-FCC-NAV-001",
+      "signals": [
+        {"name": "latitude", "dataType": "float64", "direction": "TX", "units": "deg",
+         "rangeMin": -90.0, "rangeMax": 90.0, "updateRateHz": 50}
+      ]
+    }
+  ]
+}
