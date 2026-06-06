@@ -1,24 +1,28 @@
 """Input loading, schema validation, and canonical model construction.
 
-Validation philosophy (certification-driven):
-  * No silent failures. A missing required field raises ValidationError with a
-    line reference back into the source file.
-  * XML is validated against the versioned XSD; JSON against an equivalent
-    jsonschema. Both converge on the same IcdModel.
-  * The raw input bytes are hashed (SHA-256) before parsing so the stamp in
-    every output traces to the exact authored file.
+Validation has two channels:
+  * FATAL problems raise ValidationError (with a line reference). The file does
+    not load.
+  * NON-FATAL problems are returned as a list of ValidationWarning so a
+    partially-complete ICD can still be loaded and finished in the tool.
+
+XML is validated against the (registry-assembled) XSD; JSON against an
+equivalent jsonschema. Both converge on the same IcdModel. The raw input bytes
+are hashed (SHA-256) before parsing so the provenance stamp traces to the exact
+authored file.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 from dataclasses import dataclass
 
 from lxml import etree
 
 from .signal_codec import (parse_signal_xml, parse_interface_xml,
-                          parse_packet_xml, interface_from_json_dict)
+                           parse_packet_xml, interface_from_json_dict)
 from .model import (
     IcdModel,
     Interface,
@@ -30,10 +34,12 @@ from .model import (
 XSD_NAMESPACE = "urn:icdgen:icd:1.0"
 SUPPORTED_SCHEMA_VERSIONS = {"1.0"}
 
+_C_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
 
 @dataclass
 class ValidationError(Exception):
-    """Raised on any input validation failure. Carries a line reference."""
+    """Raised on a FATAL input validation failure. Carries a line reference."""
     message: str
     line: int | None = None
     source: str | None = None
@@ -50,6 +56,14 @@ class ValidationError(Exception):
         return f"{loc}{self.message}"
 
 
+@dataclass
+class ValidationWarning:
+    """A NON-FATAL issue. The file still loads; the warning is surfaced to the
+    user (CLI/UI) so a partially-complete ICD can be finished in the tool."""
+    message: str
+    line: int | None = None
+
+
 def hash_file(path: str) -> str:
     """SHA-256 of the raw input bytes. The traceability anchor."""
     h = hashlib.sha256()
@@ -64,8 +78,6 @@ def hash_file(path: str) -> str:
 # --------------------------------------------------------------------------
 def _validate_xml(path: str) -> etree._Element:
     from .resources import compiled_xsd
-    # The XSD is assembled from the template + field registry at load time, so
-    # the schema and the registry cannot drift apart.
     schema_doc = etree.fromstring(compiled_xsd().encode("utf-8"))
     schema = etree.XMLSchema(schema_doc)
     parser = etree.XMLParser(remove_blank_text=False)
@@ -76,7 +88,6 @@ def _validate_xml(path: str) -> etree._Element:
         raise ValidationError(f"XML syntax error: {exc.msg}", line=line, source=path)
 
     if not schema.validate(tree):
-        # Report the first error with its line number for a precise DER trail.
         first = schema.error_log[0]
         raise ValidationError(
             f"Schema validation failed: {first.message}",
@@ -127,10 +138,8 @@ def _model_from_xml(root: etree._Element) -> IcdModel:
         for pkt_el in iface_el.find(_q("packets")).findall(_q("packet")):
             signals = []
             for sig_el in pkt_el.find(_q("signals")).findall(_q("signal")):
-                # Registry-driven parse: adding a signal field needs no change.
                 signals.append(parse_signal_xml(sig_el, XSD_NAMESPACE, _text))
             packets.append(parse_packet_xml(pkt_el, XSD_NAMESPACE, _text, signals))
-        # Registry-driven parse: adding an interface field needs no change here.
         interfaces.append(
             parse_interface_xml(iface_el, XSD_NAMESPACE, _text, packets)
         )
@@ -146,19 +155,11 @@ def _model_from_xml(root: etree._Element) -> IcdModel:
 # JSON path
 # --------------------------------------------------------------------------
 def _json_schema() -> dict:
-    """Equivalent constraints to the XSD, expressed for jsonschema.
+    """Equivalent constraints to the XSD, expressed for jsonschema. The signal
+    and interface objects are generated from the registries (single source)."""
+    from .schema_gen import json_signal_schema, json_interface_schema
 
-    Kept in lockstep with icd-1.0.xsd. Required arrays mirror the XSD's
-    mandatory elements so a missing field is a hard error, not a default.
-    """
-    from .fields import BUS_TYPES, DAL_LEVELS
-    from .schema_gen import json_signal_schema
-    bus_types = list(BUS_TYPES)
-    dal = list(DAL_LEVELS)
-    # Signal object is generated from the field registry — single source of truth.
     signal = json_signal_schema()
-    # Packet object: name + optional description + a signals array (which
-    # references the generated signal schema). Packets group signals.
     packet = {
         "type": "object",
         "required": ["name", "signals"],
@@ -169,9 +170,6 @@ def _json_schema() -> dict:
             "signals": {"type": "array", "minItems": 1, "items": signal},
         },
     }
-    # Interface object generated from the registry; the packets array is
-    # injected here so it references the packet schema.
-    from .schema_gen import json_interface_schema
     interface = json_interface_schema()
     interface["properties"]["packets"] = {
         "type": "array", "minItems": 1, "items": packet,
@@ -233,7 +231,6 @@ def _validate_json(path: str) -> dict:
     if errors:
         err = errors[0]
         loc = "/".join(str(p) for p in err.path) or "<root>"
-        # Approximate a line by locating the failing key in the source text.
         line = _approx_json_line(raw, err.path)
         raise ValidationError(
             f"Schema validation failed at '{loc}': {err.message}",
@@ -243,12 +240,6 @@ def _validate_json(path: str) -> dict:
 
 
 def _approx_json_line(raw: str, path) -> int | None:
-    """Best-effort line lookup for a JSON error path.
-
-    jsonschema does not report source offsets, so we locate the deepest named
-    key from the error path in the raw text. Approximate but gives the DER a
-    place to look.
-    """
     keys = [p for p in path if isinstance(p, str)]
     if not keys:
         return None
@@ -275,8 +266,6 @@ def _model_from_json(data: dict) -> IcdModel:
         author=m["author"],
         revision_history=history,
     )
-    # Registry-driven: interface + signal construction via the codec, so adding
-    # a field needs no change here.
     interfaces = [interface_from_json_dict(i) for i in data["interfaces"]]
     return IcdModel(
         schema_version=data["schemaVersion"],
@@ -288,7 +277,11 @@ def _model_from_json(data: dict) -> IcdModel:
 # --------------------------------------------------------------------------
 # Cross-field semantic checks (beyond what schema can express)
 # --------------------------------------------------------------------------
-def _semantic_checks(model: IcdModel, source: str) -> None:
+def _semantic_checks(model: IcdModel, source: str) -> list[ValidationWarning]:
+    """FATAL problems raise ValidationError. NON-FATAL problems are returned as
+    a list of ValidationWarning so a partially-complete ICD can still load."""
+    warnings: list[ValidationWarning] = []
+
     if model.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValidationError(
             f"Unsupported schemaVersion '{model.schema_version}'. "
@@ -310,23 +303,37 @@ def _semantic_checks(model: IcdModel, source: str) -> None:
             seen_pkt.add(pkt.name)
             seen_sig = set()
             for sig in pkt.signals:
+                where = f"{iface.id}/{pkt.name}.{sig.name}"
                 if sig.name in seen_sig:
                     raise ValidationError(
                         f"Duplicate signal '{sig.name}' in packet "
                         f"'{pkt.name}' of interface '{iface.id}'", source=source)
                 seen_sig.add(sig.name)
-                if sig.range_min > sig.range_max:
+                # Range check only when BOTH bounds are present (both optional).
+                if (sig.range_min is not None and sig.range_max is not None
+                        and sig.range_min > sig.range_max):
                     raise ValidationError(
                         f"Signal '{sig.name}' in '{iface.id}/{pkt.name}': "
                         f"rangeMin ({sig.range_min}) > rangeMax ({sig.range_max})",
                         source=source)
+                # ---- WARNINGS (non-fatal) ----
+                if not sig.signal_type:
+                    warnings.append(ValidationWarning(
+                        f"Signal '{where}' has no signal type; the C header "
+                        f"will use a placeholder type (uint8_t) until it is set."))
+                if not _C_IDENT_RE.match(sig.name):
+                    warnings.append(ValidationWarning(
+                        f"Signal name '{where}' is not a valid C identifier; "
+                        f"it will not compile in the generated C header as-is."))
+    return warnings
 
 
-def load(path: str) -> tuple[IcdModel, str]:
-    """Validate and load an input file. Returns (model, sha256_hex).
+def load(path: str) -> tuple[IcdModel, str, list[ValidationWarning]]:
+    """Validate and load an input file. Returns (model, sha256_hex, warnings).
 
     Format is inferred from extension: .json -> JSON, otherwise XML.
-    Raises ValidationError on any problem.
+    Raises ValidationError on a FATAL problem; non-fatal issues come back as
+    the warnings list so partially-complete ICDs can still be loaded.
     """
     file_hash = hash_file(path)
     ext = os.path.splitext(path)[1].lower()
@@ -336,5 +343,5 @@ def load(path: str) -> tuple[IcdModel, str]:
     else:
         root = _validate_xml(path)
         model = _model_from_xml(root)
-    _semantic_checks(model, path)
-    return model, file_hash
+    warnings = _semantic_checks(model, path)
+    return model, file_hash, warnings

@@ -1,23 +1,15 @@
 """Derive schema fragments from the field registries.
 
-This module is the bridge from ``fields.py`` to the two validation schemas.
 Both the XSD complexTypes and the JSON Schema objects for *signals* and
 *interfaces* are GENERATED here from the same ``FieldSpec`` registries, so they
-can never drift apart — the historical bug where the XSD and a hand-written
-jsonschema disagreed is structurally impossible.
-
-The generation helpers are generic over a registry plus a short ``prefix`` used
-to name supporting simpleTypes (e.g. ``Sig`` vs ``If``), so the same code
-serves both signal and interface fields. The XSD top-level structure (root,
-metadata, revision history, the <signals> child collection, <extensions>) still
-lives in schemas/icd-1.0.xsd.template; only the field-driven complexTypes and
-enum types are injected at marked insertion points.
+can never drift apart. Generation helpers are generic over a registry plus a
+short ``prefix`` used to name supporting simpleTypes (``Sig`` vs ``If``).
 """
 from __future__ import annotations
 
+from xml.sax.saxutils import quoteattr
+
 from .fields import (
-    BUS_TYPES,
-    DAL_LEVELS,
     DIRECTIONS,
     INTERFACE_FIELDS,
     SIGNAL_FIELDS,
@@ -34,9 +26,7 @@ _XSD_BASE = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Supporting simpleType names (parameterized by prefix to avoid collisions).
-# ---------------------------------------------------------------------------
+# ---- supporting simpleType names (parameterized by prefix) ----
 def _enum_type_name(prefix: str, f: FieldSpec) -> str:
     return f"{prefix}Enum_{f.xml_name}"
 
@@ -47,6 +37,10 @@ def _pattern_type_name(prefix: str, f: FieldSpec) -> str:
 
 def _positive_type_name(prefix: str, f: FieldSpec) -> str:
     return f"{prefix}Pos_{f.xml_name}"
+
+
+def _mininc_type_name(prefix: str, f: FieldSpec) -> str:
+    return f"{prefix}Inc_{f.xml_name}"
 
 
 def _minlen_type_name(prefix: str, f: FieldSpec) -> str:
@@ -67,6 +61,8 @@ def _xsd_inline_type(prefix: str, f: FieldSpec) -> str:
         return f'type="{_pattern_type_name(prefix, f)}"'
     if f.positive:
         return f'type="{_positive_type_name(prefix, f)}"'
+    if f.min_inclusive is not None:
+        return f'type="{_mininc_type_name(prefix, f)}"'
     if f.min_length:
         return f'type="{_minlen_type_name(prefix, f)}"'
     return f'type="{_XSD_BASE[f.py_type]}"'
@@ -87,27 +83,37 @@ def _xsd_element(prefix: str, f: FieldSpec) -> str:
 
 
 def _supporting_simple_types(prefix: str, fields) -> list[str]:
-    """Named simpleTypes (enum/pattern/positive/minLength) for a registry."""
+    """Named simpleTypes (enum/pattern/positive/min_inclusive/min_length)."""
     lines: list[str] = []
     for f in fields:
         enum = f.enum_values()
         if enum is not None:
+            vals = list(enum)
+            if not f.required and "" not in vals:
+                vals = vals + [""]  # allow blank for in-progress optional enums
             lines.append(f'  <xs:simpleType name="{_enum_type_name(prefix, f)}">')
             lines.append('    <xs:restriction base="xs:string">')
-            for v in enum:
+            for v in vals:
                 lines.append(f'      <xs:enumeration value="{v}"/>')
             lines.append('    </xs:restriction>')
             lines.append('  </xs:simpleType>')
         elif f.pattern is not None:
+            pat_attr = quoteattr(f.pattern)  # safely quotes + escapes
             lines.append(f'  <xs:simpleType name="{_pattern_type_name(prefix, f)}">')
             lines.append('    <xs:restriction base="xs:string">')
-            lines.append(f'      <xs:pattern value="{f.pattern}"/>')
+            lines.append(f'      <xs:pattern value={pat_attr}/>')
             lines.append('    </xs:restriction>')
             lines.append('  </xs:simpleType>')
         elif f.positive:
             lines.append(f'  <xs:simpleType name="{_positive_type_name(prefix, f)}">')
             lines.append('    <xs:restriction base="xs:double">')
             lines.append('      <xs:minExclusive value="0"/>')
+            lines.append('    </xs:restriction>')
+            lines.append('  </xs:simpleType>')
+        elif f.min_inclusive is not None:
+            lines.append(f'  <xs:simpleType name="{_mininc_type_name(prefix, f)}">')
+            lines.append('    <xs:restriction base="xs:double">')
+            lines.append(f'      <xs:minInclusive value="{f.min_inclusive}"/>')
             lines.append('    </xs:restriction>')
             lines.append('  </xs:simpleType>')
         elif f.min_length:
@@ -121,11 +127,6 @@ def _supporting_simple_types(prefix: str, fields) -> list[str]:
 
 def _complex_type(prefix: str, type_name: str, fields,
                   extra_sequence: list[str] | None = None) -> list[str]:
-    """Generate a complexType from a field registry.
-
-    ``extra_sequence`` lets a caller append non-field child elements (e.g. the
-    <signals> collection on an interface) after the field-derived elements.
-    """
     elements = [f for f in fields if f.xml_location == XML_ELEMENT]
     attributes = [f for f in fields if f.xml_location == XML_ATTRIBUTE]
     lines = _supporting_simple_types(prefix, fields)
@@ -143,28 +144,24 @@ def _complex_type(prefix: str, type_name: str, fields,
 
 
 def xsd_signal_block() -> str:
-    """Generate <signal> complexType + supporting simpleTypes."""
     return "\n".join(_complex_type("Sig", "SignalType", SIGNAL_FIELDS))
 
 
 def xsd_interface_block() -> str:
-    """Generate <interface> complexType + supporting simpleTypes.
-
-    The <signals> child collection is appended structurally (it is not a scalar
-    field in the registry).
-    """
     extra = ['      <xs:element name="packets" type="PacketsType"/>']
     return "\n".join(_complex_type("If", "InterfaceType", INTERFACE_FIELDS, extra))
 
 
 def _json_object(fields) -> dict:
-    """Generic JSON Schema object generator for a field registry."""
     props: dict = {}
     required: list[str] = []
     for f in fields:
         spec: dict = {}
         if f.enum_values() is not None:
-            spec["enum"] = list(f.enum_values())
+            vals = list(f.enum_values())
+            if not f.required and "" not in vals:
+                vals = vals + [""]  # allow blank for in-progress optional enums
+            spec["enum"] = vals
         elif f.py_type is str:
             spec["type"] = "string"
             if f.pattern:
@@ -175,6 +172,8 @@ def _json_object(fields) -> dict:
             spec["type"] = "number"
             if f.positive:
                 spec["exclusiveMinimum"] = 0
+            if f.min_inclusive is not None:
+                spec["minimum"] = f.min_inclusive
         elif f.py_type is int:
             spec["type"] = "integer"
             if f.positive:
@@ -193,19 +192,13 @@ def _json_object(fields) -> dict:
 
 
 def json_signal_schema() -> dict:
-    """JSON Schema object for a signal, generated from the registry."""
     return _json_object(SIGNAL_FIELDS)
 
 
 def json_interface_schema() -> dict:
-    """JSON Schema object for an interface (without the signals array, which the
-    caller injects so it can reference the signal schema)."""
     return _json_object(INTERFACE_FIELDS)
 
 
-# ---------------------------------------------------------------------------
-# Interface-level enum simpleTypes + full XSD assembly.
-# ---------------------------------------------------------------------------
 def _enum_simple_type(name: str, values) -> str:
     lines = [f'  <xs:simpleType name="{name}">',
              '    <xs:restriction base="xs:string">']
@@ -215,13 +208,11 @@ def _enum_simple_type(name: str, values) -> str:
 
 
 def xsd_enum_types() -> str:
-    """DirectionType kept for namespace stability (Bus/DAL are now generated
-    inline by the interface block as IfEnum_* types)."""
+    """DirectionType kept for namespace stability."""
     return _enum_simple_type("DirectionType", DIRECTIONS)
 
 
 def assemble_xsd(template_text: str) -> str:
-    """Inject generated signal + interface + enum blocks into the template."""
     out = template_text.replace("  <!-- @SIGNAL_TYPES@ -->", xsd_signal_block())
     out = out.replace("  <!-- @INTERFACE_TYPE@ -->", xsd_interface_block())
     out = out.replace("  <!-- @ENUM_TYPES@ -->", xsd_enum_types())

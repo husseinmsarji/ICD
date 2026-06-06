@@ -9,7 +9,6 @@ export default function InterfaceEditor({ iface, index, options, onChange, onRem
   const [open, setOpen] = useState(true);
   const set = (jsonName, value) => onChange({ ...iface, [jsonName]: value });
 
-  // identity fields = interface registry minus the structural `packets` field
   const fields = (options.interfaceFields || []).filter(
     (f) => f.name !== 'packets' && f.name !== 'signals');
 
@@ -20,16 +19,27 @@ export default function InterfaceEditor({ iface, index, options, onChange, onRem
     if (f.kind === 'enum') {
       return (
         <select value={v ?? ''} onChange={(e) => set(f.jsonName, e.target.value)}>
-          {(f.enum || []).map((o) => <option key={o} value={o}>{o}</option>)}
+          {!f.required && <option value="">(unset)</option>}
+          {(f.enum || []).filter((o) => o !== '').map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       );
     }
+    // Freeform text; a datalist makes it autocomplete-with-freeform (e.g. bus).
+    const listId = f.suggestions ? `dl-if-${f.jsonName}` : undefined;
     return (
-      <input
-        value={v ?? ''}
-        onChange={(e) => set(f.jsonName, e.target.value === '' ? (f.required ? '' : null) : e.target.value)}
-        style={{ fontFamily: 'var(--mono)' }}
-      />
+      <>
+        <input
+          value={v ?? ''}
+          list={listId}
+          onChange={(e) => set(f.jsonName, e.target.value === '' ? (f.required ? '' : null) : e.target.value)}
+          style={{ fontFamily: 'var(--mono)' }}
+        />
+        {listId && (
+          <datalist id={listId}>
+            {f.suggestions.map((o) => <option key={o} value={o} />)}
+          </datalist>
+        )}
+      </>
     );
   };
 

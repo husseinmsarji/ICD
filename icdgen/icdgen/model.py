@@ -1,28 +1,24 @@
 """Immutable domain model for ICD interface definitions.
 
-The model is deliberately decoupled from the XML/JSON wire format so that the
-artifact generators consume a single canonical object regardless of input
-syntax. Dataclasses are frozen to reinforce the determinism requirement: once
-loaded, the model cannot be mutated by a generator.
+The model is decoupled from the XML/JSON wire format so generators consume a
+single canonical object. Dataclasses are frozen to reinforce determinism.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional
 
-# Data-type representations come from the field registry (single source of
-# truth). Re-exported here so generators can keep importing them from model.
 from .fields import C_TYPE_MAP, SIMULINK_TYPE_MAP  # noqa: F401,E402
 
 
 @dataclass(frozen=True)
 class Signal:
     name: str
-    signal_type: str          # data type incl. "enum" (was data_type)
-    update_rate_hz: float
+    signal_type: str = ""          # data type incl. "enum"; blank = in-progress
+    update_rate_hz: Optional[float] = None
     units: str = ""
-    range_min: float = 0.0
-    range_max: float = 0.0
+    range_min: Optional[float] = None
+    range_max: Optional[float] = None
     scaling: float = 1.0
     offset: float = 0.0
     description: Optional[str] = None
@@ -32,12 +28,19 @@ class Signal:
     xmit_bytes: Optional[int] = None
 
     @property
+    def has_concrete_type(self) -> bool:
+        """True when signal_type maps to a real C/Simulink type."""
+        return self.signal_type in C_TYPE_MAP
+
+    @property
     def c_type(self) -> str:
-        return C_TYPE_MAP[self.signal_type]
+        # Blank/unknown type -> placeholder so an in-progress header still
+        # renders. A warning is raised at load time (loader._semantic_checks).
+        return C_TYPE_MAP.get(self.signal_type, "uint8_t")
 
     @property
     def simulink_type(self) -> str:
-        return SIMULINK_TYPE_MAP[self.signal_type]
+        return SIMULINK_TYPE_MAP.get(self.signal_type, "uint8")
 
 
 @dataclass(frozen=True)

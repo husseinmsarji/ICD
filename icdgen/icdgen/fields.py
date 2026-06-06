@@ -5,35 +5,28 @@ THE ONE PLACE TO ADD A SIGNAL FIELD.
 Every signal field is declared exactly once, here, as a ``FieldSpec``. The XSD
 fragment, the JSON Schema fragment, the editable form column, the API options
 payload, the XML serialization, and the parsing logic are all *derived* from
-this registry rather than restated. Adding a field is a one-line edit to
-``SIGNAL_FIELDS`` below (plus, only if it is a brand-new primitive data type,
-an entry in ``DATA_TYPES``).
+this registry rather than restated.
 
 Why a registry instead of scattered definitions:
   * Before, a new field meant editing 7 files that could silently disagree.
   * The XSD and JSON Schema were two hand-maintained copies of the same rules —
-    a latent drift bug. Now both are generated from one description, so they
-    cannot diverge.
+    a latent drift bug. Now both are generated from one description.
 
 Determinism: the registry is an ordered tuple. Field order here fixes column
-order in every artifact, so output stays byte-stable as long as the order is
-unchanged. Appending a new field is safe (it lands last); reordering changes
-output and is therefore a deliberate, reviewable act.
+order in every artifact. Appending a new field is safe (it lands last);
+reordering changes output and is therefore a deliberate, reviewable act.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
-# ---------------------------------------------------------------------------
-# Data type catalog: maps each abstract ICD data type to its representations.
-# Add a new primitive type here once; struct/bus generation picks it up.
-# ---------------------------------------------------------------------------
+
 @dataclass(frozen=True)
 class DataTypeSpec:
-    name: str          # abstract name used in the ICD (e.g. "float32")
-    c_type: str        # C/C++ type (e.g. "float")
-    simulink_type: str  # MATLAB/Simulink class (e.g. "single")
+    name: str
+    c_type: str
+    simulink_type: str
 
 
 DATA_TYPES: tuple[DataTypeSpec, ...] = (
@@ -55,8 +48,8 @@ DATA_TYPE_NAMES: tuple[str, ...] = tuple(d.name for d in DATA_TYPES)
 C_TYPE_MAP: dict[str, str] = {d.name: d.c_type for d in DATA_TYPES}
 SIMULINK_TYPE_MAP: dict[str, str] = {d.name: d.simulink_type for d in DATA_TYPES}
 
-# Interface-level enumerations. Declared once here; consumed by the XSD
-# template assembly, the JSON Schema, the API /meta/options endpoint, and UI.
+# Interface-level suggestion lists. BUS_TYPES is now only a *suggestion* set for
+# the UI (bus type is freeform); DAL is still an enforced enum.
 BUS_TYPES: tuple[str, ...] = (
     "ARINC429", "MIL-STD-1553", "ARINC664", "CAN", "DISCRETE", "ANALOG",
 )
@@ -64,44 +57,37 @@ DAL_LEVELS: tuple[str, ...] = ("A", "B", "C", "D", "E")
 DIRECTIONS: tuple[str, ...] = ("TX", "RX")
 
 
-# ---------------------------------------------------------------------------
-# How a field is carried in XML: as an attribute on <signal> or a child element.
-# (Identity-ish fields are attributes in the existing schema; physical
-# properties are elements. Preserving that split keeps output byte-identical.)
-# ---------------------------------------------------------------------------
 XML_ATTRIBUTE = "attribute"
 XML_ELEMENT = "element"
 
 
 @dataclass(frozen=True)
 class FieldSpec:
-    """Complete description of one signal field, in one place."""
-    # Identity
-    name: str                       # Python/JSON key, e.g. "range_min" (snake)
-    xml_name: str                   # XML name, e.g. "rangeMin" (camel)
-    json_name: str                  # JSON/DTO key, e.g. "rangeMin" (camel)
-    label: str                      # human label for the UI column header
+    """Complete description of one field, in one place."""
+    name: str
+    xml_name: str
+    json_name: str
+    label: str
 
-    # Kind / type
-    py_type: type                   # str | float | bool
+    py_type: type                   # str | float | int | bool
     xml_location: str               # XML_ATTRIBUTE | XML_ELEMENT
-    required: bool                  # required in schema?
-    default: Any = None             # default when optional/absent
-    enum: Optional[tuple[str, ...]] = None   # allowed values, if enumerated
-    enum_source: Optional[str] = None        # name of a dynamic enum (data types)
+    required: bool
+    default: Any = None
+    enum: Optional[tuple[str, ...]] = None
+    enum_source: Optional[str] = None        # "data_types" for dynamic
 
     # Validation hints (used to build XSD/JSON Schema facets)
-    positive: bool = False          # value must be > 0
-    pattern: Optional[str] = None   # regex (XSD + JSON Schema)
+    positive: bool = False                    # value must be > 0 (exclusive)
+    min_inclusive: Optional[float] = None     # value must be >= this
+    pattern: Optional[str] = None             # regex (XSD + JSON Schema)
     min_length: Optional[int] = None
 
     # UI hints
-    ui_width: str = "auto"          # "auto" | "narrow" | "tiny"
-    ui_numeric: bool = False        # render a number input
+    ui_width: str = "auto"
+    ui_numeric: bool = False
+    suggestions: Optional[tuple[str, ...]] = None  # freeform autocomplete list
 
-    # Serialization: only emit element when this predicate is true (keeps
-    # optional elements out of XML unless they carry meaningful values, which
-    # the existing serializer relied on for byte-stable output).
+    # Serialization predicate: only emit when this returns True.
     emit_if: Optional[Callable[[Any], bool]] = None
 
     def enum_values(self) -> Optional[tuple[str, ...]]:
@@ -111,13 +97,20 @@ class FieldSpec:
 
 
 # ---------------------------------------------------------------------------
-# THE REGISTRY. Order = column order in every artifact. Append to extend.
+# THE SIGNAL REGISTRY. Order = column order in every artifact.
+#
+# Permissive-by-design (v1.5.0) so partially-complete ICDs can be uploaded and
+# finished in the tool. Fields that are blank/absent on import produce non-fatal
+# WARNINGS (see loader._semantic_checks), not errors.
 # ---------------------------------------------------------------------------
 SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
+        # Relaxed pattern: allow hyphen, hash, dot, etc. so draft ICDs import.
+        # A name that is not a valid C identifier still loads but raises a
+        # non-fatal WARNING (it cannot become a C struct field / macro verbatim).
         name="name", xml_name="name", json_name="name", label="Signal Name",
         py_type=str, xml_location=XML_ATTRIBUTE, required=True,
-        pattern=r"[A-Za-z_][A-Za-z0-9_]*", ui_width="auto",
+        pattern="[^\\s\x22\x27<>]+", ui_width="auto",
     ),
     FieldSpec(
         name="description", xml_name="description", json_name="description",
@@ -126,14 +119,21 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
         emit_if=lambda v: bool(v),
     ),
     FieldSpec(
+        # Optional so an in-progress signal can have a blank type. A blank type
+        # cannot map to a real C/Simulink type, so it raises a non-fatal WARNING
+        # and the generated header uses a placeholder.
         name="signal_type", xml_name="signalType", json_name="signalType",
-        label="Signal Type", py_type=str, xml_location=XML_ATTRIBUTE, required=True,
-        enum_source="data_types", ui_width="narrow",
+        label="Signal Type", py_type=str, xml_location=XML_ATTRIBUTE,
+        required=False, default="", enum_source="data_types", ui_width="narrow",
     ),
     FieldSpec(
+        # Optional + non-negative (>= 0). Blank allowed for unknown rates;
+        # negatives are rejected by the schema.
         name="update_rate_hz", xml_name="updateRateHz", json_name="updateRateHz",
-        label="Rate (Hz)", py_type=float, xml_location=XML_ELEMENT, required=True,
-        default=1.0, positive=True, ui_width="tiny", ui_numeric=True,
+        label="Rate (Hz)", py_type=float, xml_location=XML_ELEMENT,
+        required=False, default=None, min_inclusive=0.0,
+        ui_width="tiny", ui_numeric=True,
+        emit_if=lambda v: v is not None,
     ),
     FieldSpec(
         name="units", xml_name="units", json_name="units", label="Units",
@@ -172,13 +172,15 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         name="range_min", xml_name="rangeMin", json_name="rangeMin",
-        label="Range Min", py_type=float, xml_location=XML_ELEMENT, required=True,
-        default=0.0, ui_width="tiny", ui_numeric=True,
+        label="Range Min", py_type=float, xml_location=XML_ELEMENT,
+        required=False, default=None, ui_width="tiny", ui_numeric=True,
+        emit_if=lambda v: v is not None,
     ),
     FieldSpec(
         name="range_max", xml_name="rangeMax", json_name="rangeMax",
-        label="Range Max", py_type=float, xml_location=XML_ELEMENT, required=True,
-        default=0.0, ui_width="tiny", ui_numeric=True,
+        label="Range Max", py_type=float, xml_location=XML_ELEMENT,
+        required=False, default=None, ui_width="tiny", ui_numeric=True,
+        emit_if=lambda v: v is not None,
     ),
     FieldSpec(
         name="offset", xml_name="offset", json_name="offset", label="Offset",
@@ -188,14 +190,12 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     ),
 )
 
-# Convenience indexes.
 SIGNAL_FIELDS_BY_NAME: dict[str, FieldSpec] = {f.name: f for f in SIGNAL_FIELDS}
 
+
 # ---------------------------------------------------------------------------
-# INTERFACE-LEVEL field registry. Mirrors SIGNAL_FIELDS for the <interface>
-# element's scalar fields. The child <signals> collection is NOT a scalar field
-# and is handled structurally (it is always present and required), so it is not
-# listed here. Order = element order in the XSD sequence + form field order.
+# INTERFACE-LEVEL field registry. The child <packets> collection is NOT a
+# scalar field and is handled structurally.
 # ---------------------------------------------------------------------------
 INTERFACE_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
@@ -204,9 +204,12 @@ INTERFACE_FIELDS: tuple[FieldSpec, ...] = (
         pattern=r"[A-Za-z0-9_\-]+", ui_width="auto",
     ),
     FieldSpec(
+        # Freeform: any non-empty bus name is allowed (not restricted to the
+        # BUS_TYPES suggestion list). BUS_TYPES is served to the UI as
+        # autocomplete suggestions via the descriptor.
         name="bus_type", xml_name="busType", json_name="busType", label="Bus Type",
-        py_type=str, xml_location=XML_ATTRIBUTE, required=True,
-        enum=BUS_TYPES, ui_width="narrow",
+        py_type=str, xml_location=XML_ATTRIBUTE, required=True, min_length=1,
+        ui_width="narrow", suggestions=BUS_TYPES,
     ),
     FieldSpec(
         name="dal", xml_name="dal", json_name="dal", label="DAL",
@@ -244,16 +247,13 @@ INTERFACE_FIELDS: tuple[FieldSpec, ...] = (
 INTERFACE_FIELDS_BY_NAME: dict[str, FieldSpec] = {f.name: f for f in INTERFACE_FIELDS}
 
 
-
 def signal_field_order() -> tuple[str, ...]:
-    """Field names in canonical order (drives column order everywhere)."""
     return tuple(f.name for f in SIGNAL_FIELDS)
 
 
 # ---------------------------------------------------------------------------
-# UI / API export: a JSON-serializable descriptor of the signal field set, so
-# the frontend builds its editable table columns dynamically from the registry.
-# Adding a field here makes a new column appear with no frontend code change.
+# UI / API descriptor: JSON-serializable description of a field set, consumed
+# by the React form so columns/inputs are built dynamically from the registry.
 # ---------------------------------------------------------------------------
 def _fields_descriptor(fields) -> list[dict]:
     out = []
@@ -264,8 +264,9 @@ def _fields_descriptor(fields) -> list[dict]:
             "label": f.label,
             "kind": "enum" if f.enum_values() is not None else (
                 "bool" if f.py_type is bool else
-                "number" if f.py_type is float else "text"),
+                "number" if f.py_type in (float, int) else "text"),
             "enum": list(f.enum_values()) if f.enum_values() is not None else None,
+            "suggestions": list(f.suggestions) if f.suggestions else None,
             "required": f.required,
             "uiWidth": f.ui_width,
         })

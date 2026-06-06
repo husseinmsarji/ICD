@@ -7,6 +7,9 @@
  * MISRA C:2012 oriented: C only (no C++ constructs), fixed-width integer types
  * from <stdint.h>, fully-parenthesized macro bodies, and integer constant
  * suffixes (U for unsigned). This is generated code; do not edit by hand.
+ * NOTE: signals with an unspecified type render with a uint8_t placeholder, and
+ * signals whose name is not a valid C identifier will not compile as-is (both
+ * are reported as warnings by the tool).
  * ============================================================================
  */
 #ifndef {{ guard }}
@@ -24,17 +27,20 @@
 {% for pkt in iface.packets %}
 /* ---- Packet: {{ pkt.name }}{% if pkt.description %} ({{ pkt.description }}){% endif %} ---- */
 {% for sig in pkt.signals %}
-/* {{ sig.name }}: {{ sig.units or "n/a" }}, range [{{ sig.range_min }}, {{ sig.range_max }}], {{ sig.update_rate_hz }} Hz, type {{ sig.signal_type }} */
-#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MIN     ({{ num_const(sig, sig.range_min) }})
-#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MAX     ({{ num_const(sig, sig.range_max) }})
-#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_SCALE   ({{ float_const(sig.scaling) }})
+/* {{ sig.name }}: {{ sig.units or "n/a" }}, range [{{ sig.range_min if sig.range_min is not none else "unspecified" }}, {{ sig.range_max if sig.range_max is not none else "unspecified" }}], {{ sig.update_rate_hz if sig.update_rate_hz is not none else "unspecified" }} Hz, type {{ sig.signal_type or "UNSPECIFIED" }} */
+{% if sig.range_min is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MIN     ({{ num_const(sig, sig.range_min) }})
+{% else %}/* {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MIN: unspecified */
+{% endif %}{% if sig.range_max is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MAX     ({{ num_const(sig, sig.range_max) }})
+{% else %}/* {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MAX: unspecified */
+{% endif %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_SCALE   ({{ float_const(sig.scaling) }})
 #define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_OFFSET  ({{ float_const(sig.offset) }})
-#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_RATE_HZ ({{ float_const(sig.update_rate_hz) }})
-{% if sig.data_bits is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_DATA_BITS ({{ sig.data_bits }}U)
+{% if sig.update_rate_hz is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_RATE_HZ ({{ float_const(sig.update_rate_hz) }})
+{% else %}/* {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_RATE_HZ: unspecified */
+{% endif %}{% if sig.data_bits is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_DATA_BITS ({{ sig.data_bits }}U)
 {% endif %}{% endfor %}
 
 typedef struct {{ literal_open }}
-{% for sig in pkt.signals %}    {{ sig.c_type }} {{ sig.name }}; /* {{ sig.units or "n/a" }} */
+{% for sig in pkt.signals %}    {{ sig.c_type }} {{ sig.name }}; /* {{ sig.units or "n/a" }}{% if not sig.has_concrete_type %} (TYPE UNSPECIFIED - placeholder){% endif %} */
 {% endfor %}{{ literal_close }} {{ packet_struct_name(iface, pkt) }};
 
 {% endfor %}

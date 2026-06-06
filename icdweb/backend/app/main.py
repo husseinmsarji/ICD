@@ -126,8 +126,12 @@ def validate_project(project_id: str, payload: dict = Body(default=None)):
             dto = service.read_definition(project_id)
         except FileNotFoundError:
             raise HTTPException(404, "project not found")
-    issues = service.validate_dto(dto)
-    return {"ok": len(issues) == 0, "issues": [i.__dict__ for i in issues]}
+    errors, warnings = service.validate_dto(dto)
+    return {
+        "ok": len(errors) == 0,
+        "issues": [i.__dict__ for i in errors],
+        "warnings": [w.__dict__ for w in warnings],
+    }
 
 
 @app.post("/api/projects/{project_id}/generate")
@@ -161,9 +165,10 @@ async def import_file(file: UploadFile):
         fh.write(raw)
         tmp = fh.name
     try:
-        model, file_hash = load(tmp)
+        model, file_hash, warns = load(tmp)
         return {"ok": True, "definition": model_to_dto(model).model_dump(),
-                "inputHash": file_hash}
+                "inputHash": file_hash,
+                "warnings": [{"message": w.message, "line": w.line} for w in warns]}
     except ValidationError as exc:
         return {"ok": False, "issues": [{"message": exc.message, "line": exc.line}]}
     finally:

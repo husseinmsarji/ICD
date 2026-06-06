@@ -1,16 +1,12 @@
 """icdgen command-line interface.
 
 Subcommands:
-  validate   Validate an input file against the schema (exit 1 on error).
+  validate   Validate an input file (exit 1 on FATAL error; warnings printed).
   generate   Validate then emit all artifacts to an output directory.
   diff       Compare two input files and emit a diff report.
 
-Design notes:
-  * Artifacts themselves are deterministic and timestamp-free. The only place a
-    timestamp appears is the run log, which is provenance metadata about the
-    invocation, not a generated artifact.
-  * Every run writes a run log capturing tool version, input hash, schema
-    version, and the list of artifacts produced.
+Non-fatal warnings (e.g. missing signal type, non-C-identifier name) are printed
+to stderr but do not change the exit code, so partially-complete ICDs still work.
 """
 from __future__ import annotations
 
@@ -38,7 +34,7 @@ def _write(path: str, text: str) -> None:
 
 def cmd_validate(args) -> int:
     try:
-        model, file_hash = load(args.input)
+        model, file_hash, warnings = load(args.input)
     except ValidationError as exc:
         _eprint(f"VALIDATION ERROR: {exc}")
         return 1
@@ -50,15 +46,19 @@ def cmd_validate(args) -> int:
     print(f"  packets        : {n_pkt}")
     print(f"  signals        : {n_sig}")
     print(f"  input SHA-256  : {file_hash}")
+    for w in warnings:
+        _eprint(f"  WARNING: {w.message}")
     return 0
 
 
 def cmd_generate(args) -> int:
     try:
-        model, file_hash = load(args.input)
+        model, file_hash, warnings = load(args.input)
     except ValidationError as exc:
         _eprint(f"VALIDATION ERROR: {exc}")
         return 1
+    for w in warnings:
+        _eprint(f"WARNING: {w.message}")
 
     prov = Provenance.create(file_hash, model.schema_version)
     out = args.output
@@ -102,8 +102,8 @@ def cmd_generate(args) -> int:
 
 def cmd_diff(args) -> int:
     try:
-        old_model, old_hash = load(args.old)
-        new_model, new_hash = load(args.new)
+        old_model, old_hash, _ = load(args.old)
+        new_model, new_hash, _ = load(args.new)
     except ValidationError as exc:
         _eprint(f"VALIDATION ERROR: {exc}")
         return 1
@@ -122,7 +122,6 @@ def cmd_diff(args) -> int:
     else:
         print(text, end="")
 
-    # Exit code 2 signals "differences found" for CI gating without being an error.
     return 2 if result.has_changes else 0
 
 

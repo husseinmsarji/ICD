@@ -1,9 +1,12 @@
 """Source-code artifact generators: C header and Simulink bus script.
 
-The C header targets MISRA C:2012: fixed-width
-types, fully parenthesized macro bodies, and integer-constant suffixes (U for
-unsigned). Both generators are pure template renders over the canonical model,
-making them trivially deterministic.
+The C header targets MISRA C:2012: fixed-width types, fully parenthesized macro
+bodies, and integer-constant suffixes (U for unsigned). Both generators are pure
+template renders over the canonical model, making them trivially deterministic.
+
+Optional numeric fields (range_min/range_max/update_rate_hz) may be None on an
+in-progress ICD; the helpers below tolerate None and the template emits a
+placeholder comment instead of a #define in that case.
 """
 from __future__ import annotations
 
@@ -71,9 +74,8 @@ def _num_const(sig: Signal, x: float) -> str:
     """Render a range bound as a constant whose suffix matches the field type.
 
     Integer-typed signals get integer literals (with U/LL suffixes as needed);
-    float-typed signals get float literals. Range values are authored as
-    numbers, so for integer signals we emit the integer form when the value is
-    whole, else fall back to a float literal.
+    float-typed signals get float literals. A blank/unknown signal type is
+    treated as integer-ish only when the value is whole, else a float literal.
     """
     is_int_type = sig.signal_type not in {"float32", "float64"}
     if is_int_type and x == int(x):

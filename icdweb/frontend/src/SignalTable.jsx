@@ -1,10 +1,17 @@
 import React from 'react';
 
-// Editable per-interface signal table.
+// Editable per-packet signal table.
 //
 // Columns are built from `options.signalFields`, which the backend derives from
 // the icdgen field registry. Adding a signal field to the registry makes a new
 // column appear here automatically — no change to this file.
+//
+// Field rendering by descriptor `kind`:
+//   enum   -> <select>; optional enums get a leading blank "(unset)" option
+//   bool   -> checkbox
+//   number -> numeric input (may be left blank -> sent as null)
+//   text   -> text input; if the field carries `suggestions`, a <datalist> is
+//             attached so it is freeform-with-autocomplete
 
 export default function SignalTable({ signals, options, onChange }) {
   const fields = options.signalFields || [];
@@ -18,9 +25,9 @@ export default function SignalTable({ signals, options, onChange }) {
   const add = () => {
     const blank = {};
     for (const f of fields) {
-      if (f.kind === 'number') blank[f.jsonName] = f.jsonName === 'updateRateHz' ? 1 : (f.jsonName === 'scaling' ? 1 : 0);
+      if (f.kind === 'number') blank[f.jsonName] = null;          // optional
       else if (f.kind === 'bool') blank[f.jsonName] = false;
-      else if (f.kind === 'enum') blank[f.jsonName] = f.enum?.[0] ?? '';
+      else if (f.kind === 'enum') blank[f.jsonName] = f.required ? (f.enum?.[0] ?? '') : '';
       else blank[f.jsonName] = f.required ? '' : null;
     }
     blank.name = `signal_${signals.length + 1}`;
@@ -32,7 +39,8 @@ export default function SignalTable({ signals, options, onChange }) {
     if (f.kind === 'enum') {
       return (
         <select value={v ?? ''} onChange={(e) => update(idx, f.jsonName, e.target.value)}>
-          {(f.enum || []).map((o) => <option key={o} value={o}>{o}</option>)}
+          {!f.required && <option value="">(unset)</option>}
+          {(f.enum || []).filter((o) => o !== '').map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       );
     }
@@ -43,18 +51,27 @@ export default function SignalTable({ signals, options, onChange }) {
       );
     }
     const isNum = f.kind === 'number';
+    const listId = f.suggestions ? `dl-sig-${f.jsonName}` : undefined;
     return (
-      <input
-        className={f.uiWidth}
-        type={isNum ? 'number' : 'text'}
-        step="any"
-        value={v ?? ''}
-        onChange={(e) => {
-          const raw = e.target.value;
-          if (isNum) update(idx, f.jsonName, raw === '' ? '' : Number(raw));
-          else update(idx, f.jsonName, raw === '' ? (f.required ? '' : null) : raw);
-        }}
-      />
+      <>
+        <input
+          className={f.uiWidth}
+          type={isNum ? 'number' : 'text'}
+          step="any"
+          list={listId}
+          value={v ?? ''}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (isNum) update(idx, f.jsonName, raw === '' ? null : Number(raw));
+            else update(idx, f.jsonName, raw === '' ? (f.required ? '' : null) : raw);
+          }}
+        />
+        {listId && (
+          <datalist id={listId}>
+            {f.suggestions.map((o) => <option key={o} value={o} />)}
+          </datalist>
+        )}
+      </>
     );
   };
 

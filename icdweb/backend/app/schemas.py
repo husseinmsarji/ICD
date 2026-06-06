@@ -1,12 +1,10 @@
 """API request/response schemas (Pydantic).
 
 These mirror the icdgen domain model but live separately so the wire contract
-can evolve without touching the core library. Conversion helpers translate
-between these DTOs and the frozen icdgen dataclasses.
-
-Validation here is intentionally light (types/enums only). Authoritative
-validation is always the XSD/jsonschema in icdgen.loader, so the form editor
-and a hand-authored file go through the identical gate.
+can evolve without touching the core library. Validation here is intentionally
+LOOSE (the authoritative validator is the XSD/jsonschema in icdgen.loader):
+busType is freeform, signalType may be blank, and numeric signal fields are
+optional — so a partially-complete ICD round-trips through the API.
 """
 from __future__ import annotations
 
@@ -28,21 +26,17 @@ from icdgen.model import (
     Signal,
 )
 
-BusType = Literal["ARINC429", "MIL-STD-1553", "ARINC664", "CAN", "DISCRETE", "ANALOG"]
+# Dal stays enumerated; busType is freeform; signalType may be blank.
 Dal = Literal["A", "B", "C", "D", "E"]
-DataType = Literal[
-    "bool", "uint8", "int8", "uint16", "int16",
-    "uint32", "int32", "uint64", "int64", "float32", "float64", "enum",
-]
 
 
 class SignalDTO(BaseModel):
     name: str
-    signalType: DataType
-    updateRateHz: float = 1.0
+    signalType: str = ""                   # blank allowed (in-progress)
+    updateRateHz: Optional[float] = None   # optional + non-negative (loader checks)
     units: str = ""
-    rangeMin: float = 0.0
-    rangeMax: float = 0.0
+    rangeMin: Optional[float] = None
+    rangeMax: Optional[float] = None
     scaling: float = 1.0
     offset: float = 0.0
     description: Optional[str] = None
@@ -61,7 +55,7 @@ class PacketDTO(BaseModel):
 class InterfaceDTO(BaseModel):
     id: str
     name: str
-    busType: BusType
+    busType: str                            # freeform
     dal: Dal
     sourceLru: str
     destinationLru: str
