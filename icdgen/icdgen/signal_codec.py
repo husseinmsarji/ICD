@@ -26,6 +26,8 @@ def _coerce(spec: FieldSpec, value: Any) -> Any:
         return spec.default
     if spec.py_type is float:
         return float(value)
+    if spec.py_type is int:
+        return int(value)
     if spec.py_type is bool:
         if isinstance(value, bool):
             return value
@@ -85,6 +87,8 @@ def signal_xml_lines(sig: Signal, indent: str, esc, num) -> list[str]:
             continue
         if f.py_type is float:
             rendered = num(val)
+        elif f.py_type is int:
+            rendered = str(val)
         else:
             rendered = esc("" if val is None else val)
         body.append(f"{inner}<{f.xml_name}>{rendered}</{f.xml_name}>")
@@ -116,22 +120,22 @@ from .fields import INTERFACE_FIELDS  # noqa: E402
 from .model import Interface  # noqa: E402
 
 
-def interface_from_values(values: dict[str, Any], signals) -> Interface:
+def interface_from_values(values: dict[str, Any], packets) -> Interface:
     kwargs = {}
     for f in INTERFACE_FIELDS:
         kwargs[f.name] = _coerce(f, values.get(f.name, f.default))
-    kwargs["signals"] = tuple(signals)
+    kwargs["packets"] = tuple(packets)
     return Interface(**kwargs)
 
 
-def parse_interface_xml(iface_el, ns: str, text_of, signals) -> Interface:
+def parse_interface_xml(iface_el, ns: str, text_of, packets) -> Interface:
     values: dict[str, Any] = {}
     for f in INTERFACE_FIELDS:
         if f.xml_location == XML_ATTRIBUTE:
             values[f.name] = iface_el.get(f.xml_name)
         else:
             values[f.name] = text_of(iface_el, f.xml_name, None)
-    return interface_from_values(values, signals)
+    return interface_from_values(values, packets)
 
 
 def interface_open_xml(iface: Interface, indent: str, esc) -> tuple[str, list[str]]:
@@ -164,7 +168,7 @@ def interface_to_json_dict(iface: Interface) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for f in INTERFACE_FIELDS:
         out[f.json_name] = getattr(iface, f.name)
-    out["signals"] = [signal_to_json_dict(s) for s in iface.signals]
+    out["packets"] = [packet_to_json_dict(p) for p in iface.packets]
     return out
 
 
@@ -172,5 +176,54 @@ def interface_from_json_dict(d: dict[str, Any]) -> Interface:
     values: dict[str, Any] = {}
     for f in INTERFACE_FIELDS:
         values[f.name] = d.get(f.json_name, f.default)
-    signals = [signal_from_json_dict(s) for s in d.get("signals", [])]
-    return interface_from_values(values, signals)
+    packets = [packet_from_json_dict(p) for p in d.get("packets", [])]
+    return interface_from_values(values, packets)
+
+
+# ===========================================================================
+# Packet-level codec. A packet groups signals under a name. It has a `name`
+# attribute, an optional `description`, and a <signals> child collection.
+# Packets are structural (fixed shape), so unlike signals/interfaces they are
+# not registry-driven — there is nothing to extend per-field.
+# ===========================================================================
+from .model import Packet  # noqa: E402
+
+
+def parse_packet_xml(pkt_el, ns: str, text_of, signals) -> Packet:
+    return Packet(
+        name=pkt_el.get("name"),
+        description=text_of(pkt_el, "description", None),
+        signals=tuple(signals),
+    )
+
+
+def packet_xml_lines(pkt: Packet, indent: str, esc,
+                     signal_lines_fn) -> list[str]:
+    """Render a <packet> element. ``signal_lines_fn(sig, indent)`` renders one
+    signal (passed in to avoid a circular dependency with the serializer)."""
+    lines = [f'{indent}<packet name="{esc(pkt.name)}">']
+    inner = indent + "  "
+    if pkt.description:
+        lines.append(f"{inner}<description>{esc(pkt.description)}</description>")
+    lines.append(f"{inner}<signals>")
+    for sig in pkt.signals:
+        lines.extend(signal_lines_fn(sig, inner + "  "))
+    lines.append(f"{inner}</signals>")
+    lines.append(f"{indent}</packet>")
+    return lines
+
+
+def packet_to_json_dict(pkt: Packet) -> dict[str, Any]:
+    return {
+        "name": pkt.name,
+        "description": pkt.description,
+        "signals": [signal_to_json_dict(s) for s in pkt.signals],
+    }
+
+
+def packet_from_json_dict(d: dict[str, Any]) -> Packet:
+    return Packet(
+        name=d.get("name", ""),
+        description=d.get("description"),
+        signals=tuple(signal_from_json_dict(s) for s in d.get("signals", [])),
+    )

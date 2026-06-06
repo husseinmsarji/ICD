@@ -26,8 +26,8 @@ from .model import IcdModel
 from .provenance import Provenance
 
 _BLUE = colors.HexColor("#1F4E79")
-_SIGNAL_COLS = ["Signal", "Type", "Dir", "Units", "Min", "Max",
-                "Rate", "Scale", "Opt", "Description"]
+_SIGNAL_COLS = ["Signal", "Type", "Units", "Rate", "Min", "Max",
+                "DBits", "XBits", "XByte", "Scale", "Description"]
 
 
 def _styles():
@@ -38,6 +38,10 @@ def _styles():
     ss.add(ParagraphStyle("CellHdr", parent=ss["Normal"], fontSize=7,
                           leading=8, textColor=colors.white, fontName="Helvetica-Bold"))
     return ss
+
+
+def _int(x):
+    return "" if x is None else str(x)
 
 
 def _fmt(x: float) -> str:
@@ -137,25 +141,31 @@ def build_pdf(model: IcdModel, prov: Provenance, path: str) -> None:
             story.append(Paragraph(iface.description, ss["Normal"]))
         story.append(Spacer(1, 0.08 * inch))
 
-        rows = [[Paragraph(c, ss["CellHdr"]) for c in _SIGNAL_COLS]]
-        for sig in iface.signals:
-            rows.append([
-                Paragraph(sig.name, ss["Cell"]),
-                Paragraph(sig.data_type, ss["Cell"]),
-                Paragraph(sig.direction, ss["Cell"]),
-                Paragraph(sig.units or "", ss["Cell"]),
-                Paragraph(_fmt(sig.range_min), ss["Cell"]),
-                Paragraph(_fmt(sig.range_max), ss["Cell"]),
-                Paragraph(_fmt(sig.update_rate_hz), ss["Cell"]),
-                Paragraph(_fmt(sig.scaling), ss["Cell"]),
-                Paragraph("Y" if sig.optional else "N", ss["Cell"]),
-                Paragraph(sig.description or "", ss["Cell"]),
-            ])
-        col_w = [0.95, 0.55, 0.4, 0.7, 0.55, 0.55, 0.5, 0.5, 0.35, 1.65]
-        t = Table(rows, colWidths=[w * inch for w in col_w], repeatRows=1)
-        t.setStyle(_grid_style())
-        story.append(t)
-        story.append(Spacer(1, 0.2 * inch))
+        for pkt in iface.packets:
+            label = f"Packet: {pkt.name}"
+            if pkt.description:
+                label += f" \u2014 {pkt.description}"
+            story.append(Paragraph(label, ss["Heading2"]))
+            rows = [[Paragraph(c, ss["CellHdr"]) for c in _SIGNAL_COLS]]
+            for sig in pkt.signals:
+                rows.append([
+                    Paragraph(sig.name, ss["Cell"]),
+                    Paragraph(sig.signal_type, ss["Cell"]),
+                    Paragraph(sig.units or "", ss["Cell"]),
+                    Paragraph(_fmt(sig.update_rate_hz), ss["Cell"]),
+                    Paragraph(_fmt(sig.range_min), ss["Cell"]),
+                    Paragraph(_fmt(sig.range_max), ss["Cell"]),
+                    Paragraph(_int(sig.data_bits), ss["Cell"]),
+                    Paragraph(_int(sig.xmit_bits), ss["Cell"]),
+                    Paragraph(_int(sig.xmit_bytes), ss["Cell"]),
+                    Paragraph(_fmt(sig.scaling), ss["Cell"]),
+                    Paragraph(sig.description or "", ss["Cell"]),
+                ])
+            col_w = [0.9, 0.6, 0.55, 0.45, 0.5, 0.5, 0.45, 0.45, 0.45, 0.45, 1.35]
+            t = Table(rows, colWidths=[w * inch for w in col_w], repeatRows=1)
+            t.setStyle(_grid_style())
+            story.append(t)
+            story.append(Spacer(1, 0.16 * inch))
 
     # ---- Notes ----
     story.append(Paragraph("Notes", ss["Heading1"]))

@@ -18,7 +18,7 @@
         <revision>B</revision>
         <date>2026-05-01</date>
         <author>H. Avionics</author>
-        <description>Added barometric altitude; tightened airspeed rate.</description>
+        <description>Grouped signals into packets; added bit-width fields.</description>
       </entry>
     </revisionHistory>
   </metadata>
@@ -28,61 +28,56 @@
       <sourceLru>NAV-COMPUTER</sourceLru>
       <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
       <owningDocument>ICD-FCC-NAV-001</owningDocument>
-      <description>Primary navigation state delivered to the FCC at 50 Hz.</description>
-      <signals>
-        <signal name="latitude" dataType="float64" direction="TX">
-          <units>deg</units>
-          <rangeMin>-90.0</rangeMin>
-          <rangeMax>90.0</rangeMax>
-          <updateRateHz>50</updateRateHz>
-          <encoding>IEEE754</encoding>
-          <description>WGS-84 geodetic latitude.</description>
-        </signal>
-        <signal name="longitude" dataType="float64" direction="TX">
-          <units>deg</units>
-          <rangeMin>-180.0</rangeMin>
-          <rangeMax>180.0</rangeMax>
-          <updateRateHz>50</updateRateHz>
-          <encoding>IEEE754</encoding>
-          <description>WGS-84 geodetic longitude.</description>
-        </signal>
-        <signal name="true_airspeed" dataType="float32" direction="TX">
-          <units>m/s</units>
-          <rangeMin>0.0</rangeMin>
-          <rangeMax>120.0</rangeMax>
-          <updateRateHz>50</updateRateHz>
-          <description>True airspeed estimate.</description>
-        </signal>
-        <signal name="nav_valid" dataType="bool" direction="TX">
-          <units></units>
-          <rangeMin>0</rangeMin>
-          <rangeMax>1</rangeMax>
-          <updateRateHz>50</updateRateHz>
-          <description>Navigation solution validity flag.</description>
-        </signal>
-      </signals>
-    </interface>
-    <interface id="IF-FCC-CMD" busType="ARINC429" dal="A">
-      <name>Flight Control Command</name>
-      <sourceLru>FLIGHT-CONTROL-COMPUTER</sourceLru>
-      <destinationLru>MOTOR-CONTROLLER</destinationLru>
-      <owningDocument>ICD-FCC-NAV-001</owningDocument>
-      <signals>
-        <signal name="rotor_speed_cmd" dataType="uint16" direction="TX">
-          <units>rpm</units>
-          <rangeMin>0</rangeMin>
-          <rangeMax>6000</rangeMax>
-          <updateRateHz>100</updateRateHz>
-          <scaling>0.5</scaling>
-          <description>Commanded rotor speed.</description>
-        </signal>
-        <signal name="motor_enable" dataType="bool" direction="TX">
-          <units></units>
-          <rangeMin>0</rangeMin>
-          <rangeMax>1</rangeMax>
-          <updateRateHz>100</updateRateHz>
-        </signal>
-      </signals>
+      <description>Primary navigation state delivered to the FCC.</description>
+      <packets>
+        <packet name="POSITION">
+          <description>Geodetic position, published at 50 Hz.</description>
+          <signals>
+            <signal name="latitude" signalType="float64">
+              <description>WGS-84 geodetic latitude.</description>
+              <updateRateHz>50</updateRateHz>
+              <units>deg</units>
+              <dataBits>64</dataBits>
+              <xmitBits>64</xmitBits>
+              <xmitBytes>8</xmitBytes>
+              <definition>Positive north of equator.</definition>
+              <rangeMin>-90.0</rangeMin>
+              <rangeMax>90.0</rangeMax>
+            </signal>
+            <signal name="longitude" signalType="float64">
+              <description>WGS-84 geodetic longitude.</description>
+              <updateRateHz>50</updateRateHz>
+              <units>deg</units>
+              <dataBits>64</dataBits>
+              <xmitBits>64</xmitBits>
+              <xmitBytes>8</xmitBytes>
+              <rangeMin>-180.0</rangeMin>
+              <rangeMax>180.0</rangeMax>
+            </signal>
+          </signals>
+        </packet>
+        <packet name="STATUS">
+          <signals>
+            <signal name="nav_valid" signalType="bool">
+              <description>Navigation solution validity flag.</description>
+              <updateRateHz>50</updateRateHz>
+              <units></units>
+              <dataBits>1</dataBits>
+              <rangeMin>0</rangeMin>
+              <rangeMax>1</rangeMax>
+            </signal>
+            <signal name="nav_mode" signalType="enum">
+              <description>Active navigation mode.</description>
+              <updateRateHz>10</updateRateHz>
+              <units></units>
+              <dataBits>3</dataBits>
+              <definition>0=GPS,1=INS,2=blended,3=degraded.</definition>
+              <rangeMin>0</rangeMin>
+              <rangeMax>3</rangeMax>
+            </signal>
+          </signals>
+        </packet>
+      </packets>
     </interface>
   </interfaces>
 </icd>

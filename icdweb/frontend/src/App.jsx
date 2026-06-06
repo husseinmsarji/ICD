@@ -103,9 +103,9 @@ export default function App() {
   const addIface = () => {
     // Seed a new interface from the interface field descriptors, so a new
     // registry field gets a sensible default with no change here.
-    const blank = { signals: [] };
+    const blank = { packets: [] };
     for (const f of (options.interfaceFields || [])) {
-      if (f.name === 'signals') continue;
+      if (f.name === 'packets' || f.name === 'signals') continue;
       if (f.kind === 'enum') blank[f.jsonName] = f.enum?.[0] ?? '';
       else blank[f.jsonName] = f.required ? '' : null;
     }
@@ -119,7 +119,7 @@ export default function App() {
 
   if (!options) return <div className="empty">Connecting…</div>;
 
-  const sigCount = definition ? definition.interfaces.reduce((n, i) => n + i.signals.length, 0) : 0;
+  const sigCount = definition ? definition.interfaces.reduce((n, i) => n + i.packets.reduce((m, p) => m + p.signals.length, 0), 0) : 0;
 
   return (
     <div className="app">

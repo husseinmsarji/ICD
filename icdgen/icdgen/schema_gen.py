@@ -30,6 +30,7 @@ _XSD_BASE = {
     str: "xs:string",
     float: "xs:double",
     bool: "xs:boolean",
+    int: "xs:integer",
 }
 
 
@@ -152,7 +153,7 @@ def xsd_interface_block() -> str:
     The <signals> child collection is appended structurally (it is not a scalar
     field in the registry).
     """
-    extra = ['      <xs:element name="signals" type="SignalsType"/>']
+    extra = ['      <xs:element name="packets" type="PacketsType"/>']
     return "\n".join(_complex_type("If", "InterfaceType", INTERFACE_FIELDS, extra))
 
 
@@ -172,6 +173,10 @@ def _json_object(fields) -> dict:
                 spec["minLength"] = f.min_length
         elif f.py_type is float:
             spec["type"] = "number"
+            if f.positive:
+                spec["exclusiveMinimum"] = 0
+        elif f.py_type is int:
+            spec["type"] = "integer"
             if f.positive:
                 spec["exclusiveMinimum"] = 0
         elif f.py_type is bool:

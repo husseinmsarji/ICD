@@ -22,7 +22,7 @@ source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -e ./icdgen              # installs the pinned dependencies
 ```
 
-### 1b. Run the test suite (expect: 16 passed)
+### 1b. Run the test suite (expect: 20 passed)
 
 ```bash
 cd icdgen
@@ -31,11 +31,11 @@ python -m pytest tests/ -q
 cd ..
 ```
 
-The 16 tests cover validation (XML + JSON, with line-referenced errors),
+The 20 tests cover validation (XML + JSON, with line-referenced errors),
 byte-determinism, the signal AND interface registry↔schema sync guards, and
 codec round-trips.
 
-### 1c. Validate the demo (expect: 6 interfaces, 25 signals, a SHA-256)
+### 1c. Validate the demo (expect: 3 interfaces, 4 packets, 10 signals, a SHA-256)
 
 ```bash
 python -m icdgen validate icdgen/examples/icd_demo.xml
@@ -81,9 +81,9 @@ so don't hash it.)
 python -m icdgen diff icdgen/examples/icd_demo.xml icdgen/examples/icd_demo_revD.xml
 ```
 
-Expected: one ADDED signal (`IF-NAV-STATE.vertical_speed`), one REMOVED
-(`IF-ANALOG-ENV.cabin_humidity`), and two MODIFIED with old→new values
-(`state_of_charge` rate, `true_airspeed` range_max). Exit code is 2 when
+Expected: one ADDED signal (`IF-NAV-STATE/POSITION.vertical_speed`), one REMOVED
+(`IF-BMS-CAN/PACK_TELEMETRY.state_of_charge`), and one MODIFIED
+(`IF-NAV-STATE/POSITION.altitude_msl` range_max 6000->8000). Exit code is 2 when
 differences exist (useful for CI gates); add `-o out_demo` to also write
 `*_diff.txt` and `*_diff.csv`.
 
@@ -155,7 +155,7 @@ python -m icdgen generate icdgen/examples/icd_demo.xml -o /tmp/_v && \
 echo "ALL GREEN"
 ```
 
-Expected tail: `16 passed`, `7 passed`, a generate summary, then `ALL GREEN`.
+Expected tail: `20 passed`, `7 passed`, a generate summary, then `ALL GREEN`.
 
 ---
 

@@ -17,21 +17,25 @@ from .model import IcdModel
 from .provenance import Provenance
 
 _HEADERS = [
-    "Signal", "Interface ID", "Interface Name", "Bus Type", "DAL",
-    "Source LRU", "Destination LRU", "Owning Document", "Direction",
-    "Data Type", "Units", "Range Min", "Range Max", "Update Rate (Hz)",
-    "Optional", "Input SHA-256",
+    "Signal", "Packet", "Interface ID", "Interface Name", "Bus Type", "DAL",
+    "Source LRU", "Destination LRU", "Owning Document",
+    "Signal Type", "Units", "Range Min", "Range Max", "Update Rate (Hz)",
+    "Data Bits", "Xmit Bits", "Xmit Bytes", "Scale", "Offset",
+    "Input SHA-256",
 ]
 
 
 def _rows(model: IcdModel, prov: Provenance):
-    for iface, sig in model.all_signals():
+    for iface, pkt, sig in model.all_signals():
         yield [
-            sig.name, iface.id, iface.name, iface.bus_type, iface.dal,
+            sig.name, pkt.name, iface.id, iface.name, iface.bus_type, iface.dal,
             iface.source_lru, iface.destination_lru, iface.owning_document,
-            sig.direction, sig.data_type, sig.units,
-            sig.range_min, sig.range_max, sig.update_rate_hz,
-            "Y" if sig.optional else "N", prov.input_hash,
+            sig.signal_type, sig.units, sig.range_min, sig.range_max,
+            sig.update_rate_hz,
+            "" if sig.data_bits is None else sig.data_bits,
+            "" if sig.xmit_bits is None else sig.xmit_bits,
+            "" if sig.xmit_bytes is None else sig.xmit_bytes,
+            sig.scaling, sig.offset, prov.input_hash,
         ]
 
 
@@ -62,7 +66,7 @@ def write_xlsx(model: IcdModel, prov: Provenance, path: str) -> None:
         ws.append(row)
 
     # Reasonable, fixed column widths (determinism: no autosize heuristics).
-    widths = [22, 14, 26, 14, 5, 18, 18, 22, 10, 10, 12, 11, 11, 16, 9, 30]
+    widths = [22, 16, 14, 24, 12, 5, 16, 16, 20, 12, 10, 11, 11, 14, 10, 10, 11, 8, 8, 30]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"

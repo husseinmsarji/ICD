@@ -32,24 +32,30 @@ BusType = Literal["ARINC429", "MIL-STD-1553", "ARINC664", "CAN", "DISCRETE", "AN
 Dal = Literal["A", "B", "C", "D", "E"]
 DataType = Literal[
     "bool", "uint8", "int8", "uint16", "int16",
-    "uint32", "int32", "uint64", "int64", "float32", "float64",
+    "uint32", "int32", "uint64", "int64", "float32", "float64", "enum",
 ]
-Direction = Literal["TX", "RX"]
 
 
 class SignalDTO(BaseModel):
     name: str
-    dataType: DataType
-    direction: Direction
+    signalType: DataType
+    updateRateHz: float = 1.0
     units: str = ""
     rangeMin: float = 0.0
     rangeMax: float = 0.0
-    updateRateHz: float = 1.0
     scaling: float = 1.0
     offset: float = 0.0
-    encoding: Optional[str] = None
     description: Optional[str] = None
-    optional: bool = False
+    definition: Optional[str] = None
+    dataBits: Optional[int] = None
+    xmitBits: Optional[int] = None
+    xmitBytes: Optional[int] = None
+
+
+class PacketDTO(BaseModel):
+    name: str
+    description: Optional[str] = None
+    signals: list[SignalDTO] = Field(default_factory=list)
 
 
 class InterfaceDTO(BaseModel):
@@ -61,7 +67,7 @@ class InterfaceDTO(BaseModel):
     destinationLru: str
     owningDocument: str
     description: Optional[str] = None
-    signals: list[SignalDTO] = Field(default_factory=list)
+    packets: list[PacketDTO] = Field(default_factory=list)
 
 
 class RevisionEntryDTO(BaseModel):

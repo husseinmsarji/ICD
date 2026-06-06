@@ -13,11 +13,10 @@ from dataclasses import dataclass, field
 
 from .model import IcdModel, Signal
 
-# Signal fields compared for modification detection.
-_COMPARED_FIELDS = [
-    "data_type", "direction", "units", "range_min", "range_max",
-    "update_rate_hz", "scaling", "offset", "encoding", "optional",
-]
+# Signal fields compared for modification detection. Derived from the registry
+# (minus 'name', which is the key), so adding a signal field is auto-tracked.
+from .fields import SIGNAL_FIELDS  # noqa: E402
+_COMPARED_FIELDS = [f.name for f in SIGNAL_FIELDS if f.name != "name"]
 
 
 @dataclass
@@ -30,6 +29,7 @@ class FieldChange:
 @dataclass
 class SignalChange:
     interface_id: str
+    packet_name: str
     signal_name: str
     changes: list[FieldChange] = field(default_factory=list)
 
@@ -38,8 +38,8 @@ class SignalChange:
 class DiffResult:
     added_interfaces: list[str] = field(default_factory=list)
     removed_interfaces: list[str] = field(default_factory=list)
-    added_signals: list[tuple[str, str]] = field(default_factory=list)
-    removed_signals: list[tuple[str, str]] = field(default_factory=list)
+    added_signals: list[tuple[str, str, str]] = field(default_factory=list)
+    removed_signals: list[tuple[str, str, str]] = field(default_factory=list)
     modified_signals: list[SignalChange] = field(default_factory=list)
 
     @property
@@ -50,9 +50,9 @@ class DiffResult:
         ])
 
 
-def _signal_index(model: IcdModel) -> dict[tuple[str, str], Signal]:
-    return {(iface.id, sig.name): sig
-            for iface in model.interfaces for sig in iface.signals}
+def _signal_index(model: IcdModel) -> dict[tuple[str, str, str], Signal]:
+    return {(iface.id, pkt.name, sig.name): sig
+            for iface, pkt, sig in model.all_signals()}
 
 
 def diff(old: IcdModel, new: IcdModel) -> DiffResult:
@@ -79,7 +79,8 @@ def diff(old: IcdModel, new: IcdModel) -> DiffResult:
             if getattr(o, f) != getattr(n, f)
         ]
         if changes:
-            res.modified_signals.append(SignalChange(key[0], key[1], changes))
+            res.modified_signals.append(
+                SignalChange(key[0], key[1], key[2], changes))
 
     return res
 
@@ -103,14 +104,14 @@ def render_text(res: DiffResult, old_hash: str, new_hash: str) -> str:
         lines += [f"  - {i}" for i in res.removed_interfaces]
     if res.added_signals:
         lines.append("ADDED SIGNALS:")
-        lines += [f"  + {iid}.{sname}" for iid, sname in res.added_signals]
+        lines += [f"  + {iid}/{pkt}.{sname}" for iid, pkt, sname in res.added_signals]
     if res.removed_signals:
         lines.append("REMOVED SIGNALS:")
-        lines += [f"  - {iid}.{sname}" for iid, sname in res.removed_signals]
+        lines += [f"  - {iid}/{pkt}.{sname}" for iid, pkt, sname in res.removed_signals]
     if res.modified_signals:
         lines.append("MODIFIED SIGNALS:")
         for sc in res.modified_signals:
-            lines.append(f"  ~ {sc.interface_id}.{sc.signal_name}")
+            lines.append(f"  ~ {sc.interface_id}/{sc.packet_name}.{sc.signal_name}")
             for ch in sc.changes:
                 lines.append(f"      {ch.field}: {ch.old!r} -> {ch.new!r}")
     return "\n".join(lines) + "\n"
@@ -119,17 +120,17 @@ def render_text(res: DiffResult, old_hash: str, new_hash: str) -> str:
 def render_csv(res: DiffResult) -> str:
     buf = io.StringIO(newline="")
     w = csv.writer(buf, lineterminator="\n")
-    w.writerow(["Change Type", "Interface ID", "Signal", "Field", "Old", "New"])
+    w.writerow(["Change Type", "Interface ID", "Packet", "Signal", "Field", "Old", "New"])
     for i in res.added_interfaces:
-        w.writerow(["INTERFACE_ADDED", i, "", "", "", ""])
+        w.writerow(["INTERFACE_ADDED", i, "", "", "", "", ""])
     for i in res.removed_interfaces:
-        w.writerow(["INTERFACE_REMOVED", i, "", "", "", ""])
-    for iid, sname in res.added_signals:
-        w.writerow(["SIGNAL_ADDED", iid, sname, "", "", ""])
-    for iid, sname in res.removed_signals:
-        w.writerow(["SIGNAL_REMOVED", iid, sname, "", "", ""])
+        w.writerow(["INTERFACE_REMOVED", i, "", "", "", "", ""])
+    for iid, pkt, sname in res.added_signals:
+        w.writerow(["SIGNAL_ADDED", iid, pkt, sname, "", "", ""])
+    for iid, pkt, sname in res.removed_signals:
+        w.writerow(["SIGNAL_REMOVED", iid, pkt, sname, "", "", ""])
     for sc in res.modified_signals:
         for ch in sc.changes:
-            w.writerow(["SIGNAL_MODIFIED", sc.interface_id, sc.signal_name,
-                        ch.field, ch.old, ch.new])
+            w.writerow(["SIGNAL_MODIFIED", sc.interface_id, sc.packet_name,
+                        sc.signal_name, ch.field, ch.old, ch.new])
     return buf.getvalue()

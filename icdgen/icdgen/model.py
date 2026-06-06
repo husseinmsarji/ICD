@@ -18,25 +18,33 @@ from .fields import C_TYPE_MAP, SIMULINK_TYPE_MAP  # noqa: F401,E402
 @dataclass(frozen=True)
 class Signal:
     name: str
-    data_type: str
-    direction: str  # TX | RX
-    units: str
-    range_min: float
-    range_max: float
+    signal_type: str          # data type incl. "enum" (was data_type)
     update_rate_hz: float
+    units: str = ""
+    range_min: float = 0.0
+    range_max: float = 0.0
     scaling: float = 1.0
     offset: float = 0.0
-    encoding: Optional[str] = None
     description: Optional[str] = None
-    optional: bool = False
+    definition: Optional[str] = None
+    data_bits: Optional[int] = None
+    xmit_bits: Optional[int] = None
+    xmit_bytes: Optional[int] = None
 
     @property
     def c_type(self) -> str:
-        return C_TYPE_MAP[self.data_type]
+        return C_TYPE_MAP[self.signal_type]
 
     @property
     def simulink_type(self) -> str:
-        return SIMULINK_TYPE_MAP[self.data_type]
+        return SIMULINK_TYPE_MAP[self.signal_type]
+
+
+@dataclass(frozen=True)
+class Packet:
+    name: str
+    signals: tuple[Signal, ...]
+    description: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -48,7 +56,7 @@ class Interface:
     source_lru: str
     destination_lru: str
     owning_document: str
-    signals: tuple[Signal, ...]
+    packets: tuple[Packet, ...]
     description: Optional[str] = None
 
 
@@ -78,7 +86,8 @@ class IcdModel:
     interfaces: tuple[Interface, ...]
 
     def all_signals(self):
-        """Yield (interface, signal) pairs in document order."""
+        """Yield (interface, packet, signal) triples in document order."""
         for iface in self.interfaces:
-            for sig in iface.signals:
-                yield iface, sig
+            for pkt in iface.packets:
+                for sig in pkt.signals:
+                    yield iface, pkt, sig

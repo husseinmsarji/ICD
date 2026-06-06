@@ -17,9 +17,16 @@
       "name": "Navigation State Bus",
       "sourceLru": "NAV-COMPUTER", "destinationLru": "FLIGHT-CONTROL-COMPUTER",
       "owningDocument": "ICD-FCC-NAV-001",
-      "signals": [
-        {"name": "latitude", "dataType": "float64", "direction": "TX", "units": "deg",
-         "rangeMin": -90.0, "rangeMax": 90.0, "updateRateHz": 50}
+      "packets": [
+        {
+          "name": "POSITION",
+          "description": "Geodetic position, published at 50 Hz.",
+          "signals": [
+            {"name": "latitude", "signalType": "float64", "updateRateHz": 50,
+             "units": "deg", "rangeMin": -90.0, "rangeMax": 90.0,
+             "dataBits": 64, "xmitBits": 64, "xmitBytes": 8}
+          ]
+        }
       ]
     }
   ]

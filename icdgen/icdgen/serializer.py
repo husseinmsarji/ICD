@@ -37,16 +37,16 @@ def _signal_xml(sig: Signal, indent: str) -> list[str]:
 
 def _interface_xml(iface: Interface, indent: str) -> list[str]:
     # Registry-driven: attribute/element order + emit_if come from
-    # INTERFACE_FIELDS. The <signals> collection is appended structurally so the
-    # output layout is byte-identical to the original serializer.
-    from .signal_codec import interface_open_xml
+    # INTERFACE_FIELDS. The <packets> collection (each packet wrapping a
+    # <signals> block) is appended structurally.
+    from .signal_codec import interface_open_xml, packet_xml_lines
     open_tag, body = interface_open_xml(iface, indent, _esc)
     lines = [open_tag, *body]
     inner = indent + "  "
-    lines.append(f"{inner}<signals>")
-    for sig in iface.signals:
-        lines.extend(_signal_xml(sig, inner + "  "))
-    lines.append(f"{inner}</signals>")
+    lines.append(f"{inner}<packets>")
+    for pkt in iface.packets:
+        lines.extend(packet_xml_lines(pkt, inner + "  ", _esc, _signal_xml))
+    lines.append(f"{inner}</packets>")
     lines.append(f"{indent}</interface>")
     return lines
 

@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
-import SignalTable from './SignalTable.jsx';
+import PacketEditor from './PacketEditor.jsx';
 
-// One collapsible card per interface: identity fields + its signal table.
-//
-// The identity fields are built from `options.interfaceFields`, which the
-// backend derives from the icdgen interface field registry. Adding an interface
-// field to the registry makes a new form field appear here automatically.
-// The `signals` collection is rendered by SignalTable, not as a scalar field.
+// One collapsible card per interface: identity fields (built from
+// options.interfaceFields) + a list of packets. Each packet holds its own
+// signal table. The `packets` collection is structural, not a registry field.
 
 export default function InterfaceEditor({ iface, index, options, onChange, onRemove }) {
   const [open, setOpen] = useState(true);
   const set = (jsonName, value) => onChange({ ...iface, [jsonName]: value });
 
-  const fields = (options.interfaceFields || []).filter((f) => f.name !== 'signals');
+  // identity fields = interface registry minus the structural `packets` field
+  const fields = (options.interfaceFields || []).filter(
+    (f) => f.name !== 'packets' && f.name !== 'signals');
+
+  const sigCount = iface.packets.reduce((n, p) => n + p.signals.length, 0);
 
   const fieldInput = (f) => {
     const v = iface[f.jsonName];
@@ -32,6 +33,15 @@ export default function InterfaceEditor({ iface, index, options, onChange, onRem
     );
   };
 
+  const setPacket = (i, pkt) =>
+    set('packets', iface.packets.map((x, j) => (j === i ? pkt : x)));
+  const removePacket = (i) =>
+    set('packets', iface.packets.filter((_, j) => j !== i));
+  const addPacket = () =>
+    set('packets', [...iface.packets, {
+      name: `PACKET_${iface.packets.length + 1}`, description: null, signals: [],
+    }]);
+
   return (
     <div className="card">
       <div className="card-head" style={{ cursor: 'pointer' }} onClick={() => setOpen(!open)}>
@@ -41,7 +51,9 @@ export default function InterfaceEditor({ iface, index, options, onChange, onRem
         </h2>
         <span className="tag bus">{iface.busType}</span>
         <span className={`tag dal-${iface.dal}`}>DAL {iface.dal}</span>
-        <span className="muted mono" style={{ fontSize: 11 }}>{iface.signals.length} sig</span>
+        <span className="muted mono" style={{ fontSize: 11 }}>
+          {iface.packets.length} pkt / {sigCount} sig
+        </span>
         <span className="spacer" />
         <button className="btn danger sm" onClick={(e) => { e.stopPropagation(); onRemove(); }}>
           Remove interface
@@ -57,8 +69,24 @@ export default function InterfaceEditor({ iface, index, options, onChange, onRem
               </div>
             ))}
           </div>
-          <SignalTable signals={iface.signals} options={options}
-            onChange={(sigs) => set('signals', sigs)} />
+
+          <div className="row" style={{ margin: '6px 0 10px' }}>
+            <span className="mono muted" style={{ fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase' }}>
+              Packets
+            </span>
+            <span className="spacer" />
+            <button className="btn sm" onClick={addPacket}>+ Add packet</button>
+          </div>
+
+          {iface.packets.map((pkt, i) => (
+            <PacketEditor key={i} packet={pkt} options={options}
+              onChange={(p) => setPacket(i, p)} onRemove={() => removePacket(i)} />
+          ))}
+          {iface.packets.length === 0 && (
+            <div className="muted" style={{ padding: 12, fontSize: 12 }}>
+              No packets. Add one to hold signals.
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -48,6 +48,7 @@ DATA_TYPES: tuple[DataTypeSpec, ...] = (
     DataTypeSpec("int64", "int64_t", "int64"),
     DataTypeSpec("float32", "float", "single"),
     DataTypeSpec("float64", "double", "double"),
+    DataTypeSpec("enum", "int32_t", "int32"),
 )
 
 DATA_TYPE_NAMES: tuple[str, ...] = tuple(d.name for d in DATA_TYPES)
@@ -114,25 +115,25 @@ class FieldSpec:
 # ---------------------------------------------------------------------------
 SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
-        name="name", xml_name="name", json_name="name", label="Name",
+        name="name", xml_name="name", json_name="name", label="Signal Name",
         py_type=str, xml_location=XML_ATTRIBUTE, required=True,
         pattern=r"[A-Za-z_][A-Za-z0-9_]*", ui_width="auto",
     ),
     FieldSpec(
-        name="data_type", xml_name="dataType", json_name="dataType", label="Type",
-        py_type=str, xml_location=XML_ATTRIBUTE, required=True,
+        name="description", xml_name="description", json_name="description",
+        label="Description", py_type=str, xml_location=XML_ELEMENT, required=False,
+        default=None, ui_width="auto",
+        emit_if=lambda v: bool(v),
+    ),
+    FieldSpec(
+        name="signal_type", xml_name="signalType", json_name="signalType",
+        label="Signal Type", py_type=str, xml_location=XML_ATTRIBUTE, required=True,
         enum_source="data_types", ui_width="narrow",
     ),
     FieldSpec(
-        name="direction", xml_name="direction", json_name="direction", label="Dir",
-        py_type=str, xml_location=XML_ATTRIBUTE, required=True,
-        enum=("TX", "RX"), ui_width="tiny",
-    ),
-    FieldSpec(
-        name="optional", xml_name="optional", json_name="optional", label="Opt",
-        py_type=bool, xml_location=XML_ATTRIBUTE, required=False, default=False,
-        # optional attr emitted only when true (matches original serializer).
-        emit_if=lambda v: v is True,
+        name="update_rate_hz", xml_name="updateRateHz", json_name="updateRateHz",
+        label="Rate (Hz)", py_type=float, xml_location=XML_ELEMENT, required=True,
+        default=1.0, positive=True, ui_width="tiny", ui_numeric=True,
     ),
     FieldSpec(
         name="units", xml_name="units", json_name="units", label="Units",
@@ -140,19 +141,22 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
         ui_width="tiny",
     ),
     FieldSpec(
-        name="range_min", xml_name="rangeMin", json_name="rangeMin", label="Min",
-        py_type=float, xml_location=XML_ELEMENT, required=True, default=0.0,
-        ui_width="tiny", ui_numeric=True,
+        name="data_bits", xml_name="dataBits", json_name="dataBits",
+        label="Data Bits", py_type=int, xml_location=XML_ELEMENT, required=False,
+        default=None, ui_width="tiny", ui_numeric=True,
+        emit_if=lambda v: v is not None,
     ),
     FieldSpec(
-        name="range_max", xml_name="rangeMax", json_name="rangeMax", label="Max",
-        py_type=float, xml_location=XML_ELEMENT, required=True, default=0.0,
-        ui_width="tiny", ui_numeric=True,
+        name="xmit_bits", xml_name="xmitBits", json_name="xmitBits",
+        label="Xmit Bits", py_type=int, xml_location=XML_ELEMENT, required=False,
+        default=None, ui_width="tiny", ui_numeric=True,
+        emit_if=lambda v: v is not None,
     ),
     FieldSpec(
-        name="update_rate_hz", xml_name="updateRateHz", json_name="updateRateHz",
-        label="Rate Hz", py_type=float, xml_location=XML_ELEMENT, required=True,
-        default=1.0, positive=True, ui_width="tiny", ui_numeric=True,
+        name="xmit_bytes", xml_name="xmitBytes", json_name="xmitBytes",
+        label="Xmit Bytes", py_type=int, xml_location=XML_ELEMENT, required=False,
+        default=None, ui_width="tiny", ui_numeric=True,
+        emit_if=lambda v: v is not None,
     ),
     FieldSpec(
         name="scaling", xml_name="scaling", json_name="scaling", label="Scale",
@@ -161,22 +165,26 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
         emit_if=lambda v: v != 1.0,
     ),
     FieldSpec(
+        name="definition", xml_name="definition", json_name="definition",
+        label="Definition", py_type=str, xml_location=XML_ELEMENT, required=False,
+        default=None, ui_width="auto",
+        emit_if=lambda v: bool(v),
+    ),
+    FieldSpec(
+        name="range_min", xml_name="rangeMin", json_name="rangeMin",
+        label="Range Min", py_type=float, xml_location=XML_ELEMENT, required=True,
+        default=0.0, ui_width="tiny", ui_numeric=True,
+    ),
+    FieldSpec(
+        name="range_max", xml_name="rangeMax", json_name="rangeMax",
+        label="Range Max", py_type=float, xml_location=XML_ELEMENT, required=True,
+        default=0.0, ui_width="tiny", ui_numeric=True,
+    ),
+    FieldSpec(
         name="offset", xml_name="offset", json_name="offset", label="Offset",
         py_type=float, xml_location=XML_ELEMENT, required=False, default=0.0,
         ui_width="tiny", ui_numeric=True,
         emit_if=lambda v: v != 0.0,
-    ),
-    FieldSpec(
-        name="encoding", xml_name="encoding", json_name="encoding", label="Encoding",
-        py_type=str, xml_location=XML_ELEMENT, required=False, default=None,
-        ui_width="tiny",
-        emit_if=lambda v: bool(v),
-    ),
-    FieldSpec(
-        name="description", xml_name="description", json_name="description",
-        label="Description", py_type=str, xml_location=XML_ELEMENT, required=False,
-        default=None, ui_width="auto",
-        emit_if=lambda v: bool(v),
     ),
 )
 

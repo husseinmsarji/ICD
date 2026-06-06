@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from lxml import etree
 
 from .signal_codec import (parse_signal_xml, parse_interface_xml,
-                          interface_from_json_dict)
+                          parse_packet_xml, interface_from_json_dict)
 from .model import (
     IcdModel,
     Interface,
@@ -123,13 +123,16 @@ def _model_from_xml(root: etree._Element) -> IcdModel:
 
     interfaces = []
     for iface_el in root.find(_q("interfaces")).findall(_q("interface")):
-        signals = []
-        for sig_el in iface_el.find(_q("signals")).findall(_q("signal")):
-            # Registry-driven parse: adding a signal field needs no change here.
-            signals.append(parse_signal_xml(sig_el, XSD_NAMESPACE, _text))
+        packets = []
+        for pkt_el in iface_el.find(_q("packets")).findall(_q("packet")):
+            signals = []
+            for sig_el in pkt_el.find(_q("signals")).findall(_q("signal")):
+                # Registry-driven parse: adding a signal field needs no change.
+                signals.append(parse_signal_xml(sig_el, XSD_NAMESPACE, _text))
+            packets.append(parse_packet_xml(pkt_el, XSD_NAMESPACE, _text, signals))
         # Registry-driven parse: adding an interface field needs no change here.
         interfaces.append(
-            parse_interface_xml(iface_el, XSD_NAMESPACE, _text, signals)
+            parse_interface_xml(iface_el, XSD_NAMESPACE, _text, packets)
         )
 
     return IcdModel(
@@ -154,14 +157,26 @@ def _json_schema() -> dict:
     dal = list(DAL_LEVELS)
     # Signal object is generated from the field registry — single source of truth.
     signal = json_signal_schema()
-    # Interface object generated from the registry; the signals array is
-    # injected here so it references the generated signal schema.
+    # Packet object: name + optional description + a signals array (which
+    # references the generated signal schema). Packets group signals.
+    packet = {
+        "type": "object",
+        "required": ["name", "signals"],
+        "additionalProperties": False,
+        "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "description": {"type": ["string", "null"]},
+            "signals": {"type": "array", "minItems": 1, "items": signal},
+        },
+    }
+    # Interface object generated from the registry; the packets array is
+    # injected here so it references the packet schema.
     from .schema_gen import json_interface_schema
     interface = json_interface_schema()
-    interface["properties"]["signals"] = {
-        "type": "array", "minItems": 1, "items": signal,
+    interface["properties"]["packets"] = {
+        "type": "array", "minItems": 1, "items": packet,
     }
-    interface["required"].append("signals")
+    interface["required"].append("packets")
     rev_entry = {
         "type": "object",
         "required": ["revision", "date", "author", "description"],
@@ -286,18 +301,25 @@ def _semantic_checks(model: IcdModel, source: str) -> None:
             raise ValidationError(
                 f"Duplicate interface id '{iface.id}'", source=source)
         seen_ids.add(iface.id)
-        seen_sig = set()
-        for sig in iface.signals:
-            if sig.name in seen_sig:
+        seen_pkt = set()
+        for pkt in iface.packets:
+            if pkt.name in seen_pkt:
                 raise ValidationError(
-                    f"Duplicate signal '{sig.name}' in interface '{iface.id}'",
+                    f"Duplicate packet '{pkt.name}' in interface '{iface.id}'",
                     source=source)
-            seen_sig.add(sig.name)
-            if sig.range_min > sig.range_max:
-                raise ValidationError(
-                    f"Signal '{sig.name}' in '{iface.id}': "
-                    f"rangeMin ({sig.range_min}) > rangeMax ({sig.range_max})",
-                    source=source)
+            seen_pkt.add(pkt.name)
+            seen_sig = set()
+            for sig in pkt.signals:
+                if sig.name in seen_sig:
+                    raise ValidationError(
+                        f"Duplicate signal '{sig.name}' in packet "
+                        f"'{pkt.name}' of interface '{iface.id}'", source=source)
+                seen_sig.add(sig.name)
+                if sig.range_min > sig.range_max:
+                    raise ValidationError(
+                        f"Signal '{sig.name}' in '{iface.id}/{pkt.name}': "
+                        f"rangeMin ({sig.range_min}) > rangeMax ({sig.range_max})",
+                        source=source)
 
 
 def load(path: str) -> tuple[IcdModel, str]:

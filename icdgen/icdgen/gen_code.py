@@ -10,7 +10,7 @@ import re
 
 from jinja2 import Environment, FileSystemLoader
 
-from .model import IcdModel, Interface
+from .model import IcdModel, Interface, Packet
 from .provenance import Provenance
 
 from .resources import template_dir as _template_dir
@@ -43,16 +43,27 @@ def _bus_name(iface: Interface) -> str:
     return f"Bus_{re.sub(r'[^A-Za-z0-9]', '_', iface.id)}"
 
 
+def _packet_struct_name(iface: Interface, pkt: Packet) -> str:
+    return f"{_sanitize_upper(iface.id).lower()}_{_sanitize_upper(pkt.name).lower()}_t"
+
+
+def _packet_bus_name(iface: Interface, pkt: Packet) -> str:
+    return (f"Bus_{re.sub(r'[^A-Za-z0-9]', '_', iface.id)}"
+            f"_{re.sub(r'[^A-Za-z0-9]', '_', pkt.name)}")
+
+
 def render_header(model: IcdModel, prov: Provenance) -> str:
     guard = f"ICD_{_sanitize_upper(model.metadata.document_id)}_H"
     tmpl = _env().get_template("header.h.j2")
     return tmpl.render(
         model=model, prov=prov, guard=guard,
         prefix=_prefix, struct_name=_struct_name,
+        packet_struct_name=_packet_struct_name,
         literal_open="{", literal_close="}",
     )
 
 
 def render_simulink(model: IcdModel, prov: Provenance) -> str:
     tmpl = _env().get_template("simulink_bus.m.j2")
-    return tmpl.render(model=model, prov=prov, bus_name=_bus_name)
+    return tmpl.render(model=model, prov=prov, bus_name=_bus_name,
+                       packet_bus_name=_packet_bus_name)

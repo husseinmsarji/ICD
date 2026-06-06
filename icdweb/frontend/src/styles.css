@@ -275,3 +275,30 @@ select { cursor: pointer; }
 }
 .toast.err { border-left-color: var(--red); }
 @keyframes slidein { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ---- Packets (grouping layer inside an interface) ---- */
+.packet {
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--cyan);
+  border-radius: var(--r);
+  margin-bottom: 12px;
+  background: var(--bg-0);
+}
+.packet-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--line);
+}
+.packet-tag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  color: var(--cyan); border: 1px solid rgba(69,199,224,.4);
+  border-radius: 3px; padding: 1px 6px;
+}
+.packet-name {
+  font-family: var(--mono); font-weight: 600; font-size: 13px;
+  background: var(--bg-1); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 5px 9px; width: 240px;
+}
+.packet-name:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(69,199,224,.25); }
+.packet-body { padding: 12px; }

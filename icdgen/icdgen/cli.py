@@ -42,10 +42,12 @@ def cmd_validate(args) -> int:
     except ValidationError as exc:
         _eprint(f"VALIDATION ERROR: {exc}")
         return 1
-    n_sig = sum(len(i.signals) for i in model.interfaces)
+    n_sig = sum(len(p.signals) for i in model.interfaces for p in i.packets)
+    n_pkt = sum(len(i.packets) for i in model.interfaces)
     print(f"OK: {args.input}")
     print(f"  schema version : {model.schema_version}")
     print(f"  interfaces     : {len(model.interfaces)}")
+    print(f"  packets        : {n_pkt}")
     print(f"  signals        : {n_sig}")
     print(f"  input SHA-256  : {file_hash}")
     return 0

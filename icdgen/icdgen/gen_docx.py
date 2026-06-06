@@ -16,8 +16,8 @@ from .model import IcdModel
 from .provenance import Provenance
 
 _HEADER_BLUE = RGBColor(0x1F, 0x4E, 0x79)
-_SIGNAL_COLS = ["Signal", "Type", "Dir", "Units", "Min", "Max",
-                "Rate (Hz)", "Scale", "Opt", "Description"]
+_SIGNAL_COLS = ["Signal", "Type", "Units", "Rate (Hz)", "Min", "Max",
+                "Data Bits", "Xmit Bits", "Xmit Bytes", "Scale", "Description"]
 
 
 def _set_footer(section, prov: Provenance) -> None:
@@ -135,24 +135,33 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
         if iface.description:
             doc.add_paragraph(iface.description)
 
-        tbl = doc.add_table(rows=1, cols=len(_SIGNAL_COLS))
-        tbl.style = "Table Grid"
-        for i, label in enumerate(_SIGNAL_COLS):
-            tbl.rows[0].cells[i].paragraphs[0].add_run(label)
-        _shade_header_row(tbl.rows[0])
-        for sig in iface.signals:
-            cells = tbl.add_row().cells
-            vals = [
-                sig.name, sig.data_type, sig.direction, sig.units or "",
-                _fmt(sig.range_min), _fmt(sig.range_max),
-                _fmt(sig.update_rate_hz), _fmt(sig.scaling),
-                "Y" if sig.optional else "N", sig.description or "",
-            ]
-            for i, val in enumerate(vals):
-                cells[i].text = val
-                for para in cells[i].paragraphs:
-                    for run in para.runs:
-                        run.font.size = Pt(8)
+        for pkt in iface.packets:
+            ph = doc.add_paragraph()
+            pr = ph.add_run(f"Packet: {pkt.name}")
+            pr.font.bold = True
+            pr.font.size = Pt(10)
+            if pkt.description:
+                doc.add_paragraph(pkt.description).runs[0].font.size = Pt(9)
+
+            tbl = doc.add_table(rows=1, cols=len(_SIGNAL_COLS))
+            tbl.style = "Table Grid"
+            for i, label in enumerate(_SIGNAL_COLS):
+                tbl.rows[0].cells[i].paragraphs[0].add_run(label)
+            _shade_header_row(tbl.rows[0])
+            for sig in pkt.signals:
+                cells = tbl.add_row().cells
+                vals = [
+                    sig.name, sig.signal_type, sig.units or "",
+                    _fmt(sig.update_rate_hz),
+                    _fmt(sig.range_min), _fmt(sig.range_max),
+                    _int(sig.data_bits), _int(sig.xmit_bits), _int(sig.xmit_bytes),
+                    _fmt(sig.scaling), sig.description or "",
+                ]
+                for i, val in enumerate(vals):
+                    cells[i].text = val
+                    for para in cells[i].paragraphs:
+                        for run in para.runs:
+                            run.font.size = Pt(8)
 
     # ---- Notes ----
     doc.add_heading("Notes", level=1)
@@ -179,6 +188,11 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
     doc.save(path)
     from .ooxml_determinism import normalize
     normalize(path)
+
+
+def _int(x):
+    """Format an optional integer cell; blank when absent."""
+    return "" if x is None else str(x)
 
 
 def _fmt(x: float) -> str:

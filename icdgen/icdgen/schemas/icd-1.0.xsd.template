@@ -72,6 +72,20 @@
     </xs:sequence>
   </xs:complexType>
 
+  <xs:complexType name="PacketsType">
+    <xs:sequence>
+      <xs:element name="packet" type="PacketType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="PacketType">
+    <xs:sequence>
+      <xs:element name="description" type="xs:string" minOccurs="0"/>
+      <xs:element name="signals" type="SignalsType"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+
   <!-- @INTERFACE_TYPE@ -->
 
   <xs:complexType name="SignalsType">

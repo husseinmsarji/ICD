@@ -128,7 +128,8 @@ def save_definition(project_id: str, dto: IcdDTO, name: str | None = None,
         "documentId": dto.metadata.documentId,
         "revision": dto.metadata.revision,
         "interfaceCount": len(dto.interfaces),
-        "signalCount": sum(len(i.signals) for i in dto.interfaces),
+        "packetCount": sum(len(i.packets) for i in dto.interfaces),
+        "signalCount": sum(len(p.signals) for i in dto.interfaces for p in i.packets),
         "updatedAt": now,
     })
     if _new:
@@ -218,11 +219,18 @@ def diff(old: IcdDTO, new: IcdDTO) -> dict:
         "csv": diff_csv(res),
         "addedInterfaces": res.added_interfaces,
         "removedInterfaces": res.removed_interfaces,
-        "addedSignals": [{"interface": i, "signal": s} for i, s in res.added_signals],
-        "removedSignals": [{"interface": i, "signal": s} for i, s in res.removed_signals],
+        "addedSignals": [
+            {"interface": i, "packet": p, "signal": s}
+            for i, p, s in res.added_signals
+        ],
+        "removedSignals": [
+            {"interface": i, "packet": p, "signal": s}
+            for i, p, s in res.removed_signals
+        ],
         "modifiedSignals": [
             {
                 "interface": sc.interface_id,
+                "packet": sc.packet_name,
                 "signal": sc.signal_name,
                 "changes": [
                     {"field": c.field, "old": str(c.old), "new": str(c.new)}

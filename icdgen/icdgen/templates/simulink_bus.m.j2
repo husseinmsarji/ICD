@@ -6,13 +6,14 @@ function icd_bus_objects()
 %   Document: {{ model.metadata.document_id }} rev {{ model.metadata.revision }}
 %
 %   Running this script populates the base workspace with one Simulink.Bus
-%   object per ICD interface. Bus element data types and dimensions are
-%   derived directly from the ICD signal definitions.
+%   object per ICD packet. Bus element data types and dimensions are derived
+%   directly from the ICD signal definitions.
 
 {% for iface in model.interfaces %}
-% --- Interface {{ iface.id }}: {{ iface.name }} ({{ iface.bus_type }}, DAL {{ iface.dal }}) ---
+{% for pkt in iface.packets %}
+% --- {{ iface.id }} / {{ pkt.name }}  ({{ iface.bus_type }}, DAL {{ iface.dal }}) ---
 clear elems;
-{% for sig in iface.signals %}
+{% for sig in pkt.signals %}
 elems({{ loop.index }}) = Simulink.BusElement;
 elems({{ loop.index }}).Name = '{{ sig.name }}';
 elems({{ loop.index }}).DataType = '{{ sig.simulink_type }}';
@@ -20,9 +21,10 @@ elems({{ loop.index }}).Dimensions = 1;
 elems({{ loop.index }}).Unit = '{{ sig.units }}';
 elems({{ loop.index }}).Description = '{{ (sig.description or "") | replace("'", "''") }}';
 {% endfor %}
-{{ bus_name(iface) }} = Simulink.Bus;
-{{ bus_name(iface) }}.Elements = elems;
-assignin('base', '{{ bus_name(iface) }}', {{ bus_name(iface) }});
+{{ packet_bus_name(iface, pkt) }} = Simulink.Bus;
+{{ packet_bus_name(iface, pkt) }}.Elements = elems;
+assignin('base', '{{ packet_bus_name(iface, pkt) }}', {{ packet_bus_name(iface, pkt) }});
 
+{% endfor %}
 {% endfor %}
 end

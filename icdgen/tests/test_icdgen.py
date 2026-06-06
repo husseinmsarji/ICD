@@ -33,7 +33,7 @@ def _make_xml(tmp_path, body):
 def test_valid_xml_loads():
     model, h = load(EX_XML)
     assert model.schema_version == "1.0"
-    assert len(model.interfaces) == 2
+    assert len(model.interfaces) == 1
     assert len(h) == 64  # sha256 hex
 
 
@@ -86,7 +86,7 @@ def test_header_contains_provenance():
     out = gen_code.render_header(model, prov)
     assert h in out
     assert "DO NOT EDIT" in out
-    assert "if_nav_state_t" in out
+    assert "if_nav_state_position_t" in out
 
 
 def test_trace_csv_row_count():
@@ -94,7 +94,7 @@ def test_trace_csv_row_count():
     prov = Provenance.create(h, model.schema_version)
     csv = gen_trace.render_csv(model, prov)
     # header + one row per signal
-    n_sig = sum(len(i.signals) for i in model.interfaces)
+    n_sig = sum(len(pk.signals) for i in model.interfaces for pk in i.packets)
     assert len(csv.strip().splitlines()) == n_sig + 1
     assert h in csv
 
@@ -154,9 +154,8 @@ def test_registry_roundtrip_via_codec():
     """A signal survives codec dict<->Signal round-trips field-for-field."""
     from icdgen.signal_codec import signal_to_json_dict, signal_from_json_dict
     model, _ = load(EX_XML)
-    for iface in model.interfaces:
-        for sig in iface.signals:
-            assert signal_from_json_dict(signal_to_json_dict(sig)) == sig
+    for iface, pkt, sig in model.all_signals():
+        assert signal_from_json_dict(signal_to_json_dict(sig)) == sig
 
 
 def test_assembled_xsd_compiles():
@@ -182,3 +181,37 @@ def test_interface_roundtrip_via_codec():
     model, _ = load(EX_XML)
     for iface in model.interfaces:
         assert interface_from_json_dict(interface_to_json_dict(iface)) == iface
+
+
+def test_duplicate_packet_rejected(tmp_path):
+    src = open(EX_XML).read()
+    block = src[src.index('<packet name="POSITION"'):
+                src.index("</packet>") + len("</packet>")]
+    body = src.replace(block, block + "\n" + block, 1)
+    path = _make_xml(tmp_path, body)
+    with pytest.raises(ValidationError):
+        load(path)
+
+
+def test_packet_roundtrip_via_codec():
+    from icdgen.signal_codec import packet_to_json_dict, packet_from_json_dict
+    model, _ = load(EX_XML)
+    for iface in model.interfaces:
+        for pkt in iface.packets:
+            assert packet_from_json_dict(packet_to_json_dict(pkt)) == pkt
+
+
+def test_signal_has_no_optional_or_direction():
+    """The removed fields must be gone from the model and schema."""
+    from icdgen.fields import SIGNAL_FIELDS
+    names = {f.name for f in SIGNAL_FIELDS}
+    assert "optional" not in names
+    assert "direction" not in names
+    assert "signal_type" in names
+    assert {"data_bits", "xmit_bits", "xmit_bytes", "definition"} <= names
+
+
+def test_enum_is_a_valid_signal_type():
+    from icdgen.fields import DATA_TYPE_NAMES, C_TYPE_MAP
+    assert "enum" in DATA_TYPE_NAMES
+    assert C_TYPE_MAP["enum"] == "int32_t"

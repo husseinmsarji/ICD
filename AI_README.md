@@ -14,7 +14,7 @@
 
 ## Version
 
-- **Project version:** 1.2.0
+- **Project version:** 1.3.0
 - **`icdgen` tool/provenance version:** 1.0.0  (string stamped into artifacts —
   see "Determinism contract"; bump deliberately, it changes nothing in output)
 - **Schema version:** 1.0  (XML namespace `urn:icdgen:icd:1.0`)
@@ -22,13 +22,26 @@
   - 1.0.0 — initial CLI tool + web app.
   - 1.1.0 — SIGNAL field-registry refactor (single source of truth for signal
     fields; XSD + JSON Schema generated, no longer duplicated).
-  - 1.2.0 (current) — (a) INTERFACE field-registry refactor: interface fields
-    now also flow from one registry; the interface XSD complexType + JSON Schema
-    + XML parse/serialize + DTO conversion + the React interface form are all
-    derived from `INTERFACE_FIELDS`. (b) Dependencies EXACT-pinned to the
-    versions that produced the verified deterministic baseline. (c) Added a
-    full-capability demo ICD. All six artifacts remain byte-identical to the
-    pre-refactor baseline; verified again from a clean pinned venv.
+  - 1.2.x — INTERFACE field-registry refactor; dependencies EXACT-pinned;
+    full-capability demo; Dockerfile frontend COPY path bugfix (1.2.1).
+  - 1.3.0 (current) — Model + UI changes (BREAKING; output format changed,
+    so 1.2.x baseline hashes intentionally no longer apply — a NEW baseline was
+    established and determinism re-verified):
+      (a) Removed the signal `optional` field entirely.
+      (b) Added a PACKET grouping layer: Interface -> Packets -> Signals. A
+          packet has a name + optional description and holds the signals. New
+          XML: <interface><packets><packet name=".."><signals>... New UI:
+          PacketEditor inside InterfaceEditor.
+      (c) New signal field set + order: Signal Name, Description, Signal Type,
+          Rate (Hz), Units, Data Bits, Xmit Bits, Xmit Bytes, Scale, Definition,
+          Range Min, Range Max, Offset. Renamed data_type -> signal_type and
+          added "enum" as a data type (C int32_t / Simulink int32). Added new
+          int fields data_bits/xmit_bits/xmit_bytes and free-text definition.
+          Removed direction and encoding from signals.
+  - 1.2.1 (current) — Bugfix: the Dockerfile frontend stage used context paths
+    `frontend/...` but the build context is the repo root, so they must be
+    `icdweb/frontend/...`. Fixed all frontend COPY lines. No code/output change;
+    determinism unaffected. (Backend COPY lines were already correct.)
 
 ---
 
@@ -62,7 +75,7 @@ Two deployable pieces sharing one core library:
 │   ├── pyi_rth_docx.py              runtime hook: fixes python-docx template path when frozen
 │   ├── README.md                    human-facing CLI readme
 │   ├── schemas/
-│   │   └── icd-1.0.xsd.template      XSD TEMPLATE: @SIGNAL_TYPES@ / @INTERFACE_TYPE@ / @ENUM_TYPES@ markers
+│   │   └── icd-1.0.xsd.template      XSD TEMPLATE: @SIGNAL_TYPES@/@INTERFACE_TYPE@/@ENUM_TYPES@ markers; PacketsType/PacketType structural
 │   ├── examples/
 │   │   ├── icd_example.xml           small 2-interface example
 │   │   ├── icd_example.json
@@ -74,8 +87,8 @@ Two deployable pieces sharing one core library:
 │   │   ├── cli.py                   argparse CLI: validate | generate | diff
 │   │   ├── fields.py        ★ SINGLE SOURCE OF TRUTH: SIGNAL_FIELDS + INTERFACE_FIELDS + enums
 │   │   ├── schema_gen.py    ★ derives XSD fragments + JSON Schema from the registry
-│   │   ├── signal_codec.py  ★ registry-driven Signal ↔ XML/JSON/dict conversions
-│   │   ├── model.py                 frozen dataclasses (Signal/Interface/.../IcdModel)
+│   │   ├── signal_codec.py  ★ registry-driven Signal/Interface + structural Packet codecs
+│   │   ├── model.py                 frozen dataclasses (Signal/Packet/Interface/.../IcdModel)
 │   │   ├── loader.py                validate (XSD+jsonschema) + parse → IcdModel; hashing
 │   │   ├── serializer.py            IcdModel → canonical XML (inverse of loader)
 │   │   ├── provenance.py            tool/version/hash stamp (timestamp-free)
@@ -90,7 +103,7 @@ Two deployable pieces sharing one core library:
 │   │   └── templates/
 │   │       ├── header.h.j2
 │   │       └── simulink_bus.m.j2
-│   └── tests/test_icdgen.py         16 tests (validation, determinism, signal+interface registry sync)
+│   └── tests/test_icdgen.py         20 tests (validation, determinism, registry sync, packets, enum)
 └── icdweb/
     ├── Dockerfile                   multi-stage: build React → serve from FastAPI
     ├── docker-compose.yml           local run; build context = repo root
@@ -110,7 +123,8 @@ Two deployable pieces sharing one core library:
             ├── api.js               one function per backend endpoint
             ├── App.jsx              app shell, state, sidebar, save/validate loop
             ├── MetadataEditor.jsx   document metadata + revision history
-            ├── InterfaceEditor.jsx  ★ identity fields BUILT FROM options.interfaceFields
+            ├── InterfaceEditor.jsx  ★ identity fields (registry) + list of PacketEditors
+            ├── PacketEditor.jsx     packet name + description + a SignalTable
             ├── SignalTable.jsx  ★ columns BUILT FROM options.signalFields
             ├── GeneratePanel.jsx    format checklist + artifact downloads
             └── styles.css           avionics instrument-panel design system
@@ -134,8 +148,8 @@ interface field is declared once, here. Downstream representations are
 
 Key objects:
 - `DataTypeSpec(name, c_type, simulink_type)` and the `DATA_TYPES` tuple — the
-  catalog of primitive data types. `C_TYPE_MAP`, `SIMULINK_TYPE_MAP`,
-  `DATA_TYPE_NAMES` are derived from it.
+  catalog of signal types, including "enum" (-> C int32_t, Simulink int32).
+  `C_TYPE_MAP`, `SIMULINK_TYPE_MAP`, `DATA_TYPE_NAMES` are derived from it.
 - `BUS_TYPES`, `DAL_LEVELS`, `DIRECTIONS` — interface-level enums.
 - `FieldSpec` — full description of one signal field. Fields of note:
   `name` (snake_case, Python/`Signal` attribute), `xml_name` (camelCase),
@@ -146,8 +160,10 @@ Key objects:
   and `emit_if` (predicate controlling whether an optional element/attr is
   written — preserves byte-stable XML).
 - `SIGNAL_FIELDS: tuple[FieldSpec, ...]` — **the registry. Order = column order
-  everywhere.** Currently: name, data_type, direction, optional, units,
-  range_min, range_max, update_rate_hz, scaling, offset, encoding, description.
+  everywhere.** Currently (v1.3.0): name, description, signal_type,
+  update_rate_hz, units, data_bits, xmit_bits, xmit_bytes, scaling, definition,
+  range_min, range_max, offset. (`py_type` may be str, float, int, or bool —
+  `int` used by the *_bits/_bytes fields.)
 - `signal_field_order()`, `SIGNAL_FIELDS_BY_NAME`, `signal_fields_descriptor()`
   (JSON descriptor consumed by the API/UI).
 - `INTERFACE_FIELDS: tuple[FieldSpec, ...]` — the interface registry. Order =
@@ -171,16 +187,24 @@ named `{prefix}Enum_*`, `{prefix}Pat_*`, `{prefix}Pos_*`, `{prefix}Len_*`
   `@ENUM_TYPES@` markers in the template.
 - `json_signal_schema()`, `json_interface_schema()` → JSON-Schema objects.
 
+**Model hierarchy (`model.py`):** `IcdModel -> Interface -> Packet -> Signal`.
+`Packet` is a structural dataclass (name, optional description, signals) — it
+is NOT registry-driven because it has no extensible scalar fields.
+`IcdModel.all_signals()` yields `(interface, packet, signal)` triples.
+
 **File: `icdgen/icdgen/signal_codec.py`.** Registry-driven data movement for
-BOTH signals and interfaces:
+signals and interfaces, plus a structural packet codec:
 - Signals: `signal_from_values`, `parse_signal_xml(sig_el, ns, text_of)`,
   `signal_xml_lines(sig, indent, esc, num)`, `signal_to_json_dict(sig)`,
   `signal_from_json_dict(d)`.
-- Interfaces: `interface_from_values(values, signals)`,
-  `parse_interface_xml(iface_el, ns, text_of, signals)`,
+- Interfaces: `interface_from_values(values, packets)`,
+  `parse_interface_xml(iface_el, ns, text_of, packets)`,
   `interface_open_xml(iface, indent, esc)` → (open-tag, child-element-lines)
-  with the caller appending `<signals>` + close tag,
+  with the caller appending `<packets>` + close tag,
   `interface_to_json_dict(iface)`, `interface_from_json_dict(d)`.
+- Packets (structural): `parse_packet_xml(pkt_el, ns, text_of, signals)`,
+  `packet_xml_lines(pkt, indent, esc, signal_lines_fn)`,
+  `packet_to_json_dict(pkt)`, `packet_from_json_dict(d)`.
 All honor `xml_location` + `emit_if`. camelCase dicts are used by backend DTOs.
 
 ---
@@ -196,6 +220,9 @@ All honor `xml_location` + `emit_if`. camelCase dicts are used by backend DTOs.
 a canonical `*.source.xml`, hashes it (SHA-256), builds a `Provenance`, then runs
 each selected builder in `service.ARTIFACT_BUILDERS`. Artifacts land in the
 project's `out/` dir; downloaded via `GET .../artifacts/{filename}`.
+Signals live under packets: generators iterate `model.all_signals()` (yields
+interface, packet, signal) or walk `iface.packets[].signals`. The C header emits
+one struct per PACKET (`<iface>_<packet>_t`); Simulink emits one Bus per packet.
 
 **CLI path:** `cli.py` → `loader.load(path)` → generators in `gen_*` → files +
 `run.log`. Same core code as the web path.
@@ -262,6 +289,17 @@ artifacts. Mechanisms:
   (The `<signals>` collection is special and stays structural — don't add it to
   the registry.)
 
+### Work with PACKETS (the grouping layer)
+- Packets are structural, not registry-driven. To change a packet's own fields
+  (currently just name + description) edit: `PacketType` in the XSD template,
+  the packet JSON-schema block in `loader._json_schema`, the `Packet` dataclass
+  in `model.py`, the packet codec functions in `signal_codec.py`, `PacketDTO` in
+  backend `schemas.py`, and `PacketEditor.jsx`. (This is the same multi-file
+  pattern signals had before they were registry-driven — if packet fields start
+  to churn, give packets their own registry.)
+- Signals always belong to a packet. Iterate via `model.all_signals()` →
+  `(interface, packet, signal)`.
+
 ### Add a new schema version (1.1)
 - Namespace is versioned. Add `icd-1.1.xsd.template` (with the `@SIGNAL_TYPES@`,
   `@INTERFACE_TYPE@`, `@ENUM_TYPES@` markers), register `"1.1"` in
@@ -276,7 +314,7 @@ artifacts. Mechanisms:
 
 ## Build / run / test quick reference
 
-- **Core tests:** `cd icdgen && python -m pytest tests/ -q`  (16 tests)
+- **Core tests:** `cd icdgen && python -m pytest tests/ -q`  (20 tests)
 - **Backend tests:** `cd icdweb/backend && ICDGEN_DATA_DIR=/tmp/t python -m pytest tests/ -q`  (7 tests)
 - **Frontend build:** `cd icdweb/frontend && npm install && npm run build`
 - **Docker (from repo root):** `docker compose -f icdweb/docker-compose.yml up --build` → http://localhost:8000
@@ -308,3 +346,7 @@ artifacts. Mechanisms:
   rebuild, re-run the determinism check; if a hash changes, that's expected only
   for a deliberate format change and the baseline must be re-recorded.
 - **DOCX/PDF/header presentation** of new fields is manual (see recipe step 4).
+  The DOCX/PDF show a curated subset of the 13 signal columns (page-width
+  limited); the traceability CSV/XLSX carry the full set.
+- **C header / Simulink map one struct/Bus per PACKET** (named
+  `<iface>_<packet>_t` / `Bus_<iface>_<packet>`).

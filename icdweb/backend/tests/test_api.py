@@ -36,7 +36,7 @@ def test_options_lists_formats():
 def test_import_valid_file():
     r = _import_example()
     assert r["ok"] is True
-    assert len(r["definition"]["interfaces"]) == 2
+    assert len(r["definition"]["interfaces"]) == 1
 
 
 def test_create_validate_generate_download():
@@ -72,7 +72,7 @@ def test_diff_endpoint():
     imp = _import_example()
     old = copy.deepcopy(imp["definition"])
     new = copy.deepcopy(imp["definition"])
-    new["interfaces"][0]["signals"][2]["rangeMax"] = 999
+    new["interfaces"][0]["packets"][0]["signals"][0]["rangeMax"] = 999
     r = c.post("/api/diff", json={"old": old, "new": new}).json()
     assert r["hasChanges"] is True
     assert r["modifiedSignals"][0]["changes"][0]["field"] == "range_max"
