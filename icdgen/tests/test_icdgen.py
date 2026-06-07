@@ -423,3 +423,55 @@ def test_revision_summary_groups_by_pr_ticket(tmp_path):
     assert "pr_ticket" not in text
     # removed (untagged in old) under "(no ticket)"
     assert "(no ticket): -gone" in text
+
+
+# ---- serializer attribute escaping (quote-safety regression) ----
+def test_serializer_escapes_quotes_in_attributes(tmp_path):
+    """A packet name (an XSD xs:string attribute with no pattern) containing a
+    double quote must serialize to well-formed XML that re-parses to the same
+    value. Regression: escape() does not escape quotes by default, which
+    corrupted the attribute and broke round-trip."""
+    from icdgen.serializer import to_xml
+    from icdgen.model import (Packet, Signal, Interface, Metadata,
+                              RevisionEntry, IcdModel)
+    sig = Signal(name="s", signal_type="uint8", update_rate_hz=1.0, units="u",
+                 range_min=0.0, range_max=1.0)
+    pkt = Packet(name='bad"quote', signals=(sig,))
+    iface = Interface(id="IF-1", name="N", bus_type="CAN", dal="A",
+                      source_lru="A", destination_lru="B", owning_document="D",
+                      packets=(pkt,))
+    meta = Metadata("D", "T", "P", "A", "2026-06-01", "H",
+                    (RevisionEntry("A", "2026-06-01", "H", "d"),))
+    xml = to_xml(IcdModel("1.0", meta, (iface,)))
+    p = tmp_path / "q.xml"
+    p.write_text(xml, encoding="utf-8")
+    model2, _h, _w = load(str(p))
+    assert model2.interfaces[0].packets[0].name == 'bad"quote'
+
+
+# ---- configuration-management guards ----
+def test_schema_template_copies_in_sync():
+    """The XSD template is shipped in two locations (repo-root schemas/ for
+    source/PyInstaller, and inside the package for wheel installs). They are
+    kept in sync by hand, so guard that they are byte-identical: a drift here
+    would mean a wheel-installed tool validates against a different schema than
+    a source checkout, which is a qualification hazard."""
+    root_copy = os.path.join(ROOT, "schemas", "icd-1.0.xsd.template")
+    pkg_copy = os.path.join(ROOT, "icdgen", "schemas", "icd-1.0.xsd.template")
+    if not (os.path.isfile(root_copy) and os.path.isfile(pkg_copy)):
+        import pytest as _pt
+        _pt.skip("only one template copy present in this layout")
+    with open(root_copy, "rb") as a, open(pkg_copy, "rb") as b:
+        assert a.read() == b.read(), "XSD template copies have drifted"
+
+
+def test_package_version_matches_tool_version():
+    """pyproject version and the provenance TOOL_VERSION are independent by
+    design, but the packaging version must not silently lag the project; guard
+    that pyproject parses and exposes a concrete version string."""
+    import re
+    pyproject = os.path.join(ROOT, "pyproject.toml")
+    text = open(pyproject, encoding="utf-8").read()
+    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    assert m, "version missing from pyproject.toml"
+    assert re.match(r"^\d+\.\d+\.\d+$", m.group(1)), "version not semver"

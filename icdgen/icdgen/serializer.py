@@ -16,9 +16,16 @@ from .model import IcdModel, Interface, Signal
 
 _NS = "urn:icdgen:icd:1.0"
 
+# Escape map covers the attribute-significant quote characters in addition to
+# the default & < >. The same escaper is used for element text and attribute
+# values; escaping quotes in element text is harmless and keeps a single code
+# path, so every emitted value is well-formed regardless of which fields are
+# carried as attributes (e.g. an unconstrained packet name).
+_ESCAPE_MAP = {'"': "&quot;", "'": "&apos;"}
+
 
 def _esc(text: str) -> str:
-    return escape("" if text is None else str(text))
+    return escape("" if text is None else str(text), _ESCAPE_MAP)
 
 
 def _num(x: float) -> str:
