@@ -324,7 +324,9 @@ def test_revision_summary_computes_against_prior(tmp_path):
     m, _h, _w = load(str(new_path))
     sums = {s.revision: s.text for s in compute_revision_summaries(m, str(tmp_path))}
     assert sums["A"] == "Initial release."
-    assert "signal" in sums["B"]  # +1 signal(s)
+    # Default mode is PR-grouped; sig_b is untagged so it lands under "(no ticket)".
+    assert "+sig_b" in sums["B"]
+    assert "(no ticket)" in sums["B"]
 
 
 def test_revision_summary_missing_source_is_graceful(tmp_path):
@@ -339,3 +341,85 @@ def test_revision_summary_missing_source_is_graceful(tmp_path):
     m, _h, _w = load(_make_xml(tmp_path, body))
     sums = compute_revision_summaries(m, str(tmp_path))  # must not raise
     assert sums[-1].text  # has some note text
+
+
+# ---- standalone diff PDF report (Flow B) ----
+def test_diff_pdf_report_builds_and_is_deterministic(tmp_path):
+    from icdgen.gen_diff_pdf import build_diff_pdf
+    import hashlib
+    demo = os.path.join(ROOT, "examples", "icd_demo.xml")
+    revd = os.path.join(ROOT, "examples", "icd_demo_revD.xml")
+    o, oh, _ = load(demo)
+    n, nh, _ = load(revd)
+    res = diff(o, n)
+    p1 = str(tmp_path / "d1.pdf")
+    p2 = str(tmp_path / "d2.pdf")
+    build_diff_pdf(res, oh, nh, p1, "Rev C", "Rev D")
+    build_diff_pdf(res, oh, nh, p2, "Rev C", "Rev D")
+    b1 = open(p1, "rb").read()
+    assert b1[:5] == b"%PDF-"
+    assert b1 == open(p2, "rb").read()  # deterministic
+
+
+def test_diff_pdf_report_no_changes(tmp_path):
+    from icdgen.gen_diff_pdf import build_diff_pdf
+    model, h, _ = load(EX_XML)
+    res = diff(model, model)               # identical -> no changes
+    p = str(tmp_path / "same.pdf")
+    build_diff_pdf(res, h, h, p)
+    assert open(p, "rb").read()[:5] == b"%PDF-"
+
+
+# ---- PR-grouped change summary (1.6.x) ----
+def test_revision_summary_groups_by_pr_ticket(tmp_path):
+    from icdgen.rev_summary import compute_revision_summaries
+
+    def doc(rev, signals_xml, prior=""):
+        return (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">'
+            '<metadata><documentId>D</documentId><documentTitle>T</documentTitle>'
+            '<program>P</program><revision>' + rev + '</revision>'
+            '<revisionDate>2026-06-02</revisionDate><author>H</author>'
+            '<revisionHistory>'
+            '<entry><revision>A</revision><date>2026-06-01</date><author>H</author>'
+            '<description>init</description></entry>'
+            '<entry><revision>B</revision><date>2026-06-02</date><author>H</author>'
+            '<description>chg</description></entry>'
+            '</revisionHistory></metadata>' + prior +
+            '<interfaces><interface id="IF-1" busType="CAN" dal="A">'
+            '<name>N</name><sourceLru>A</sourceLru><destinationLru>B</destinationLru>'
+            '<owningDocument>D</owningDocument><packets><packet name="P1"><signals>'
+            + signals_xml +
+            '</signals></packet></packets></interface></interfaces></icd>')
+
+    def sig(name, extra="", ticket=None):
+        t = f"<prTicket>{ticket}</prTicket>" if ticket else ""
+        return (f'<signal name="{name}" signalType="uint8">'
+                f'<updateRateHz>10</updateRateHz><units>u</units>'
+                f'<rangeMin>0</rangeMin><rangeMax>1</rangeMax>{extra}{t}</signal>')
+
+    # OLD (rev A state): keeper + to-be-removed; both untagged.
+    old = doc("A", sig("keeper") + sig("gone"))
+    (tmp_path / "old.xml").write_text(old, encoding="utf-8")
+
+    # NEW (rev B): keeper modified (range, PR-2000), 'gone' removed, 'fresh' added
+    # (PR-1042). 'keeper' rangeMax 1->5.
+    new = doc(
+        "B",
+        sig("keeper", extra="", ticket="PR-2000").replace(
+            "<rangeMax>1</rangeMax>", "<rangeMax>5</rangeMax>")
+        + sig("fresh", ticket="PR-1042"),
+        prior='<priorRevisions><priorRevision revision="A" source="old.xml"/>'
+              '</priorRevisions>')
+    (tmp_path / "new.xml").write_text(new, encoding="utf-8")
+
+    m, _h, _w = load(str(tmp_path / "new.xml"))
+    text = {s.revision: s.text for s in compute_revision_summaries(m, str(tmp_path))}["B"]
+    # added attributed to its ticket
+    assert "PR-1042: +fresh" in text
+    # modified attributed to the new signal's ticket; pr_ticket field suppressed
+    assert "PR-2000: ~keeper (range_max)" in text
+    assert "pr_ticket" not in text
+    # removed (untagged in old) under "(no ticket)"
+    assert "(no ticket): -gone" in text

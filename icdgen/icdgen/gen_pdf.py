@@ -122,7 +122,7 @@ def build_pdf(model: IcdModel, prov: Provenance, path: str,
 
     # ---- Revision history ----
     story.append(Paragraph("Revision History", ss["Heading1"]))
-    rh = [["Revision", "Date", "Author", "Description", "Changes in This Revision"]]
+    rh = [["Revision", "Date", "Author", "Description", "Change Summary Report"]]
     for e in meta.revision_history:
         rh.append([e.revision, e.date, e.author,
                    Paragraph(e.description, ss["Cell"]),

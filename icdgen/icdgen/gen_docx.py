@@ -127,7 +127,7 @@ def build_docx(model: IcdModel, prov: Provenance, path: str,
     rh.style = "Table Grid"
     hdr = rh.rows[0].cells
     for i, label in enumerate(["Revision", "Date", "Author", "Description",
-                               "Changes in This Revision"]):
+                               "Change Summary Report"]):
         hdr[i].paragraphs[0].add_run(label)
     _shade_header_row(rh.rows[0])
     for e in meta.revision_history:

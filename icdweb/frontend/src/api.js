@@ -27,8 +27,9 @@ export const api = {
 
   validate: (id, definition) =>
     req(`/api/projects/${id}/validate`, { method: 'POST', headers: J, body: JSON.stringify({ definition }) }),
-  generate: (id, definition, formats) =>
-    req(`/api/projects/${id}/generate`, { method: 'POST', headers: J, body: JSON.stringify({ definition, formats }) }),
+  generate: (id, definition, formats, priorFiles) =>
+    req(`/api/projects/${id}/generate`, { method: 'POST', headers: J,
+      body: JSON.stringify({ definition, formats, priorFiles: priorFiles || undefined }) }),
   artifactUrl: (id, filename) => `/api/projects/${id}/artifacts/${encodeURIComponent(filename)}`,
   exportXmlUrl: (id) => `/api/projects/${id}/export.xml`,
 
@@ -41,23 +42,28 @@ export const api = {
   diff: (oldDef, newDef) =>
     req('/api/diff', { method: 'POST', headers: J, body: JSON.stringify({ old: oldDef, new: newDef }) }),
 
-  diffFiles: (oldFile, newFile) => {
+  // Two-file diff -> downloads a formatted PDF change report (no JSON).
+  // Throws with the server's message (e.g. which side failed to parse).
+  diffReportPdf: async (oldFile, newFile) => {
     const fd = new FormData();
     fd.append('old', oldFile);
     fd.append('new', newFile);
-    return req('/api/diff-files', { method: 'POST', body: fd });
-  },
-
-  // Diff the current (in-memory) definition against an uploaded file.
-  diffAgainstFile: (currentDef, file) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return req('/api/import', { method: 'POST', body: fd }).then((r) => {
-      if (!r.ok) throw new Error(r.issues?.[0]?.message || 'Import failed');
-      return req('/api/diff', {
-        method: 'POST', headers: J,
-        body: JSON.stringify({ old: r.definition, new: currentDef }),
-      });
-    });
+    const res = await fetch('/api/diff-report', { method: 'POST', body: fd });
+    if (!res.ok) {
+      let msg = `${res.status} ${res.statusText}`;
+      try { const j = await res.json(); if (j.detail) msg = j.detail; } catch { /* not json */ }
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    // Pull the filename from the Content-Disposition header when present.
+    const cd = res.headers.get('content-disposition') || '';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    const filename = m ? m[1] : 'icd_diff.pdf';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    return filename;
   },
 };

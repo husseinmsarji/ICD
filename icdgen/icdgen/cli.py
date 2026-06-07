@@ -117,9 +117,14 @@ def cmd_diff(args) -> int:
         base = new_model.metadata.document_id
         txt_path = os.path.join(args.output, f"{base}_diff.txt")
         csv_path = os.path.join(args.output, f"{base}_diff.csv")
+        pdf_path = os.path.join(args.output, f"{base}_diff.pdf")
         _write(txt_path, text)
         _write(csv_path, diff_csv(result))
-        print(f"Diff written to {txt_path} and {csv_path}")
+        from .gen_diff_pdf import build_diff_pdf
+        build_diff_pdf(result, old_hash, new_hash, pdf_path,
+                       old_label=os.path.basename(args.old),
+                       new_label=os.path.basename(args.new))
+        print(f"Diff written to {txt_path}, {csv_path}, and {pdf_path}")
     else:
         print(text, end="")
 

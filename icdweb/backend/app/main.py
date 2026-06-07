@@ -137,12 +137,15 @@ def validate_project(project_id: str, payload: dict = Body(default=None)):
 @app.post("/api/projects/{project_id}/generate")
 def generate_project(project_id: str, payload: dict = Body(default=None)):
     formats = (payload or {}).get("formats") or list(service.ARTIFACT_BUILDERS.keys())
+    # Optional just-in-time prior-revision files for the Change Summary Report
+    # column: {revisionLetter: fileText}. Not persisted with the project.
+    prior_files = (payload or {}).get("priorFiles") or None
     # Persist posted definition first so generation reflects the latest edits.
     if payload and payload.get("definition") is not None:
         dto = IcdDTO.model_validate(payload["definition"])
         service.save_definition(project_id, dto)
     try:
-        return service.generate(project_id, formats)
+        return service.generate(project_id, formats, prior_files=prior_files)
     except FileNotFoundError:
         raise HTTPException(404, "project not found")
 
@@ -209,6 +212,60 @@ async def diff_files(old: UploadFile, new: UploadFile):
     result = service.diff(old_dto, new_dto)
     result["ok"] = True
     return result
+
+
+@app.post("/api/diff-report")
+async def diff_report(old: UploadFile, new: UploadFile):
+    """Diff two uploaded XML/JSON ICD files and return a formatted PDF change
+    report as a download. Either side failing to parse yields a 400 with the
+    offending side + message."""
+    import hashlib
+    from fastapi.responses import Response
+    from icdgen.diff import diff as _diff
+    from icdgen.gen_diff_pdf import build_diff_pdf
+    from .schemas import dto_to_model
+
+    async def _parse(f: UploadFile):
+        raw = await f.read()
+        sfx = ".json" if (f.filename or "").lower().endswith(".json") else ".xml"
+        with tempfile.NamedTemporaryFile("wb", suffix=sfx, delete=False) as fh:
+            fh.write(raw)
+            tmp = fh.name
+        try:
+            model, _hash, _warns = load(tmp)
+            return model, None
+        except ValidationError as exc:
+            return None, {"message": exc.message, "line": exc.line}
+        finally:
+            os.unlink(tmp)
+
+    old_model, old_err = await _parse(old)
+    if old_err:
+        raise HTTPException(400, f"old file: {old_err['message']}")
+    new_model, new_err = await _parse(new)
+    if new_err:
+        raise HTTPException(400, f"new file: {new_err['message']}")
+
+    # Hash the canonical serialized XML of each side (matches generate()).
+    old_xml = to_xml(old_model)
+    new_xml = to_xml(new_model)
+    old_hash = hashlib.sha256(old_xml.encode("utf-8")).hexdigest()
+    new_hash = hashlib.sha256(new_xml.encode("utf-8")).hexdigest()
+
+    res = _diff(old_model, new_model)
+    with tempfile.NamedTemporaryFile("wb", suffix=".pdf", delete=False) as fh:
+        out = fh.name
+    try:
+        build_diff_pdf(res, old_hash, new_hash, out,
+                       old_label=old.filename or "old",
+                       new_label=new.filename or "new")
+        data = open(out, "rb").read()
+    finally:
+        os.unlink(out)
+
+    fname = f"{new_model.metadata.document_id}_diff.pdf"
+    return Response(data, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 @app.get("/api/projects/{project_id}/export.xml")

@@ -19,7 +19,7 @@ import os
 import shutil
 import tempfile
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from icdgen import gen_code, gen_docx, gen_pdf, gen_trace
@@ -145,8 +145,12 @@ def delete_project(project_id: str) -> None:
 # --------------------------------------------------------------------------
 # Validate / generate / diff
 # --------------------------------------------------------------------------
-def validate_dto(dto: IcdDTO) -> list[ValidationIssue]:
-    """Validate via the authoritative icdgen loader. Returns [] if valid."""
+def validate_dto(dto: IcdDTO) -> tuple[list[ValidationIssue], list[ValidationIssue]]:
+    """Validate via the authoritative icdgen loader.
+
+    Returns (errors, warnings). errors is empty when the file is loadable;
+    warnings are non-fatal (e.g. missing type, non-C-identifier name).
+    """
     model = dto_to_model(dto)
     xml = to_xml(model)
     with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False,
@@ -154,19 +158,30 @@ def validate_dto(dto: IcdDTO) -> list[ValidationIssue]:
         fh.write(xml)
         tmp = fh.name
     try:
-        load(tmp)
-        return []
+        _model, _hash, warns = load(tmp)
+        return [], [ValidationIssue(message=w.message, line=w.line) for w in warns]
     except ValidationError as exc:
-        return [ValidationIssue(message=exc.message, line=exc.line)]
+        return [ValidationIssue(message=exc.message, line=exc.line)], []
     finally:
         os.unlink(tmp)
 
 
-def generate(project_id: str, formats: list[str]) -> dict:
+def generate(project_id: str, formats: list[str],
+             prior_files: dict[str, str] | None = None) -> dict:
+    """Generate artifacts for a project.
+
+    `prior_files` is an optional, JUST-IN-TIME map of {revision_letter: file
+    text} uploaded in the editor for Flow A. Each entry is written to a temp
+    file inside the output dir and linked as a synthetic PriorRevision so the
+    DOCX/PDF revision table's "Change Summary Report" column populates. These
+    files are transient: they are NOT part of the saved definition and are
+    removed after generation.
+    """
     dto = read_definition(project_id)
-    issues = validate_dto(dto)
-    if issues:
-        return {"ok": False, "issues": [i.__dict__ for i in issues], "artifacts": []}
+    errors, warnings = validate_dto(dto)
+    if errors:
+        return {"ok": False, "issues": [i.__dict__ for i in errors],
+                "warnings": [w.__dict__ for w in warnings], "artifacts": []}
 
     model = dto_to_model(dto)
     # Hash the canonical serialized XML so the stamp traces to exactly what was
@@ -178,19 +193,48 @@ def generate(project_id: str, formats: list[str]) -> dict:
     file_hash = hash_file(src_path)
     prov = Provenance.create(file_hash, model.schema_version)
 
+    # ---- Flow A: materialize uploaded prior-revision files (just-in-time) ----
+    # Write each into the output dir and attach synthetic PriorRevision links so
+    # rev_summary can resolve them relative to base_dir=out. Tracked for cleanup.
+    from icdgen.model import PriorRevision
+    prior_tmp_paths: list[str] = []
+    if prior_files:
+        priors = []
+        for rev, content in prior_files.items():
+            if not content:
+                continue
+            fname = f".prior_{rev}.xml"
+            ppath = os.path.join(out, fname)
+            _atomic_write(ppath, content)
+            prior_tmp_paths.append(ppath)
+            priors.append(PriorRevision(revision=rev, source=fname))
+        if priors:
+            # Merge with any priorRevisions already on the model (uploaded wins
+            # on a revision-letter collision).
+            existing = {p.revision: p for p in model.prior_revisions}
+            for p in priors:
+                existing[p.revision] = p
+            model = replace(model, prior_revisions=tuple(existing.values()))
+
     base = model.metadata.document_id
     produced = []
-    for key in formats:
-        if key not in ARTIFACT_BUILDERS:
-            continue
-        suffix, builder = ARTIFACT_BUILDERS[key]
-        path = os.path.join(out, f"{base}{suffix}")
-        globals()[builder](model, prov, path)
-        produced.append({"format": key, "filename": os.path.basename(path)})
+    try:
+        for key in formats:
+            if key not in ARTIFACT_BUILDERS:
+                continue
+            suffix, builder = ARTIFACT_BUILDERS[key]
+            path = os.path.join(out, f"{base}{suffix}")
+            globals()[builder](model, prov, path, base_dir=out)
+            produced.append({"format": key, "filename": os.path.basename(path)})
+    finally:
+        for pth in prior_tmp_paths:
+            if os.path.exists(pth):
+                os.unlink(pth)
 
     return {
         "ok": True,
         "issues": [],
+        "warnings": [w.__dict__ for w in warnings],
         "inputHash": file_hash,
         "schemaVersion": model.schema_version,
         "artifacts": produced,
@@ -283,29 +327,31 @@ def _empty_definition(name: str) -> IcdDTO:
     })
 
 
-# Artifact builder shims (string-dispatched from ARTIFACT_BUILDERS).
-def _write_header(model, prov, path):
+# Artifact builder shims (string-dispatched from ARTIFACT_BUILDERS). All accept
+# base_dir for a uniform call site; only the document builders use it (to
+# resolve prior-revision sources for the Change Summary Report column).
+def _write_header(model, prov, path, base_dir=None):
     _write_text(path, gen_code.render_header(model, prov))
 
 
-def _write_simulink(model, prov, path):
+def _write_simulink(model, prov, path, base_dir=None):
     _write_text(path, gen_code.render_simulink(model, prov))
 
 
-def _write_trace_csv(model, prov, path):
+def _write_trace_csv(model, prov, path, base_dir=None):
     _write_text(path, gen_trace.render_csv(model, prov))
 
 
-def _write_trace_xlsx(model, prov, path):
+def _write_trace_xlsx(model, prov, path, base_dir=None):
     gen_trace.write_xlsx(model, prov, path)
 
 
-def _write_docx(model, prov, path):
-    gen_docx.build_docx(model, prov, path)
+def _write_docx(model, prov, path, base_dir=None):
+    gen_docx.build_docx(model, prov, path, base_dir=base_dir)
 
 
-def _write_pdf(model, prov, path):
-    gen_pdf.build_pdf(model, prov, path)
+def _write_pdf(model, prov, path, base_dir=None):
+    gen_pdf.build_pdf(model, prov, path, base_dir=base_dir)
 
 
 def _write_text(path, text):

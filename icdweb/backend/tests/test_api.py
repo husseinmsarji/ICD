@@ -83,3 +83,31 @@ def test_path_traversal_blocked():
     pid = c.post("/api/projects", json={"name": "T3", "definition": imp["definition"]}).json()["id"]
     r = c.get(f"/api/projects/{pid}/artifacts/..%2F..%2Fproject.json")
     assert r.status_code == 404
+
+
+def test_generate_with_prior_file_fills_summary():
+    """Flow A (web): uploading a prior-revision file via priorFiles populates the
+    Change Summary Report column and leaves no temp files behind."""
+    import io, zipfile, re, glob, os as _os
+    revd = _os.path.join(_os.path.dirname(__file__), "..", "..", "..",
+                         "icdgen", "examples", "icd_demo_revD.xml")
+    revb_state = _os.path.join(_os.path.dirname(__file__), "..", "..", "..",
+                               "icdgen", "examples", "icd_demo.xml")
+    with open(_os.path.abspath(revd), "rb") as f:
+        imp = c.post("/api/import",
+                     files={"file": ("d.xml", f, "application/xml")}).json()
+    pid = c.post("/api/projects",
+                 json={"name": "FA", "definition": imp["definition"]}).json()["id"]
+    prior = open(_os.path.abspath(revb_state), encoding="utf-8").read()
+    g = c.post(f"/api/projects/{pid}/generate",
+               json={"formats": ["docx"], "priorFiles": {"B": prior}}).json()
+    assert g["ok"] is True
+    fn = [a["filename"] for a in g["artifacts"] if a["filename"].endswith(".docx")][0]
+    d = c.get(f"/api/projects/{pid}/artifacts/{fn}")
+    doc = zipfile.ZipFile(io.BytesIO(d.content)).read(
+        "word/document.xml").decode("utf-8", "ignore")
+    assert "Change Summary Report" in doc
+    # Default summary is PR-grouped. revD's vertical_speed carries no ticket, so
+    # the add is attributed to "(no ticket)". (PR attribution is covered by the
+    # core test test_revision_summary_groups_by_pr_ticket.)
+    assert "+vertical_speed" in doc

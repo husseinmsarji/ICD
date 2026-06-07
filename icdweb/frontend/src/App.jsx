@@ -16,6 +16,7 @@ export default function App() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [priorFiles, setPriorFiles] = useState({});  // {revision: fileText}, transient (Flow A)
   const fileRef = useRef();
 
   const showToast = useCallback((msg, err = false) => {
@@ -39,6 +40,7 @@ export default function App() {
     setDirty(false);
     setValid(null);
     setIssues([]);
+    setPriorFiles({});
   };
 
   const newProject = async () => {
@@ -97,6 +99,8 @@ export default function App() {
   };
 
   const updateDef = (patch) => { setDefinition(patch); setDirty(true); };
+  const setPriorFile = (revision, content) =>
+    setPriorFiles((prev) => ({ ...prev, [revision]: content }));
 
   const setMeta = (metadata) => updateDef({ ...definition, metadata });
   const setIface = (idx, iface) =>
@@ -166,17 +170,21 @@ export default function App() {
 
       <div className="main">
         {!definition ? (
-          <div className="empty">
-            <div style={{ fontSize: 40 }}>⌖</div>
-            <div>No project open.</div>
-            <div className="row">
-              <button className="btn primary" onClick={newProject}>Create new ICD</button>
-              <button className="btn" onClick={() => fileRef.current.click()}>Import a file</button>
+          <>
+            <div className="empty" style={{ height: 'auto', paddingTop: 40, paddingBottom: 30 }}>
+              <div style={{ fontSize: 40 }}>⌖</div>
+              <div>No project open.</div>
+              <div className="row">
+                <button className="btn primary" onClick={newProject}>Create new ICD</button>
+                <button className="btn" onClick={() => fileRef.current.click()}>Import a file</button>
+              </div>
             </div>
-          </div>
+            <DiffPanel onToast={showToast} />
+          </>
         ) : (
           <>
-            <MetadataEditor meta={definition.metadata} onChange={setMeta} />
+            <MetadataEditor meta={definition.metadata} onChange={setMeta}
+              onPriorFile={setPriorFile} priorFiles={priorFiles} />
 
             <div className="row" style={{ margin: '20px 0 10px' }}>
               <h2 style={{ fontSize: 13, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--ink-1)' }}>
@@ -195,11 +203,12 @@ export default function App() {
             )}
 
             <div style={{ marginTop: 22 }}>
-              <GeneratePanel projectId={activeId} definition={definition} options={options} onToast={showToast} />
+              <GeneratePanel projectId={activeId} definition={definition} options={options}
+                priorFiles={priorFiles} onToast={showToast} />
             </div>
 
             <div style={{ marginTop: 22 }}>
-              <DiffPanel definition={definition} onToast={showToast} />
+              <DiffPanel onToast={showToast} />
             </div>
           </>
         )}

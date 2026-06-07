@@ -10,7 +10,7 @@ const LABELS = {
   'trace-xlsx': 'Traceability (.xlsx)',
 };
 
-export default function GeneratePanel({ projectId, definition, options, onToast }) {
+export default function GeneratePanel({ projectId, definition, options, priorFiles, onToast }) {
   const all = options.artifactFormats || [];
   const [selected, setSelected] = useState(new Set(all));
   const [result, setResult] = useState(null);
@@ -25,7 +25,7 @@ export default function GeneratePanel({ projectId, definition, options, onToast 
   const run = async () => {
     setBusy(true); setResult(null);
     try {
-      const r = await api.generate(projectId, definition, [...selected]);
+      const r = await api.generate(projectId, definition, [...selected], priorFiles);
       setResult(r);
       if (!r.ok) onToast('Validation failed — fix errors before generating', true);
       else onToast(`Generated ${r.artifacts.length} artifact(s)`);
