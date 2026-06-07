@@ -4,8 +4,8 @@ import React from 'react';
 //
 // Each revision row carries an optional "baseline file" upload (Flow A): the
 // ICD as it was AT that revision. It is read as text and handed up via
-// onPriorFile(revision, content); it is NOT saved with the project — it rides
-// along just-in-time with the next Generate call to compute the
+// onPriorFile(revision, content, name); it is NOT saved with the project — it
+// rides along just-in-time with the next Generate call to compute the
 // "Change Summary Report" column for the FOLLOWING revision.
 
 export default function MetadataEditor({ meta, onChange, onPriorFile, priorFiles }) {
@@ -21,8 +21,11 @@ export default function MetadataEditor({ meta, onChange, onPriorFile, priorFiles
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => onPriorFile?.(revision, String(reader.result || ''));
+    reader.onload = () => onPriorFile?.(revision, String(reader.result || ''), file.name);
     reader.readAsText(file);
+    // Reset the native input so re-selecting the same filename still fires
+    // onChange. The captured filename is surfaced in our own UI below, so the
+    // (now-cleared) native "No file chosen" text is hidden behind a styled label.
     e.target.value = '';
   };
 
@@ -55,28 +58,42 @@ export default function MetadataEditor({ meta, onChange, onPriorFile, priorFiles
               <th style={{ width: 120 }}>Date</th>
               <th style={{ width: 140 }}>Author</th>
               <th>Description</th>
-              <th style={{ width: 220 }}>Baseline file (state at this revision)</th>
+              <th style={{ width: 240 }}>Baseline file (state at this revision)</th>
               <th style={{ width: 30 }}></th>
             </tr>
           </thead>
           <tbody>
-            {meta.revisionHistory.map((r, i) => (
-              <tr key={i}>
-                <td><input value={r.revision} onChange={(e) => setRev(i, 'revision', e.target.value)} /></td>
-                <td><input type="date" value={r.date} onChange={(e) => setRev(i, 'date', e.target.value)} /></td>
-                <td><input value={r.author} onChange={(e) => setRev(i, 'author', e.target.value)} /></td>
-                <td><input value={r.description} onChange={(e) => setRev(i, 'description', e.target.value)} /></td>
-                <td>
-                  <input type="file" accept=".xml,.json"
-                    onChange={(e) => onFile(r.revision, e)}
-                    title="Upload the ICD as it was at this revision; the next revision's Change Summary Report is computed from it." />
-                  {priors[r.revision] && (
-                    <span className="ok mono" style={{ fontSize: 10, marginLeft: 4 }}>● loaded</span>
-                  )}
-                </td>
-                <td><button className="btn danger sm" onClick={() => removeRev(i)}>×</button></td>
-              </tr>
-            ))}
+            {meta.revisionHistory.map((r, i) => {
+              const prior = priors[r.revision];
+              const priorName = prior ? (prior.name || 'attached file') : null;
+              return (
+                <tr key={i}>
+                  <td><input value={r.revision} onChange={(e) => setRev(i, 'revision', e.target.value)} /></td>
+                  <td><input type="date" value={r.date} onChange={(e) => setRev(i, 'date', e.target.value)} /></td>
+                  <td><input value={r.author} onChange={(e) => setRev(i, 'author', e.target.value)} /></td>
+                  <td><input value={r.description} onChange={(e) => setRev(i, 'description', e.target.value)} /></td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <label className="btn ghost sm" style={{ cursor: 'pointer', margin: 0 }}
+                        title="Upload the ICD as it was at this revision; the next revision's Change Summary Report is computed from it.">
+                        {priorName ? 'Replace file' : 'Choose file'}
+                        <input type="file" accept=".xml,.json" style={{ display: 'none' }}
+                          onChange={(e) => onFile(r.revision, e)} />
+                      </label>
+                      {priorName ? (
+                        <span className="ok mono" style={{ fontSize: 10.5, display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          title={priorName}>
+                          ✓ {priorName}
+                        </span>
+                      ) : (
+                        <span className="muted mono" style={{ fontSize: 10.5 }}>none</span>
+                      )}
+                    </div>
+                  </td>
+                  <td><button className="btn danger sm" onClick={() => removeRev(i)}>×</button></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         <div className="muted" style={{ marginTop: 8, fontSize: 11 }}>

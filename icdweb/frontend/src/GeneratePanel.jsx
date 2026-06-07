@@ -25,7 +25,13 @@ export default function GeneratePanel({ projectId, definition, options, priorFil
   const run = async () => {
     setBusy(true); setResult(null);
     try {
-      const r = await api.generate(projectId, definition, [...selected], priorFiles);
+      // priorFiles is {revision: {content, name}}; the backend expects
+      // {revision: contentString}, so unwrap to content here. The `?? v`
+      // fallback keeps it working if an entry is still a bare string.
+      const priorContent = Object.fromEntries(
+        Object.entries(priorFiles || {}).map(([rev, v]) => [rev, v?.content ?? v])
+      );
+      const r = await api.generate(projectId, definition, [...selected], priorContent);
       setResult(r);
       if (!r.ok) onToast('Validation failed — fix errors before generating', true);
       else onToast(`Generated ${r.artifacts.length} artifact(s)`);

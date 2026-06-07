@@ -16,7 +16,7 @@ export default function App() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
-  const [priorFiles, setPriorFiles] = useState({});  // {revision: fileText}, transient (Flow A)
+  const [priorFiles, setPriorFiles] = useState({});  // {revision: {content, name}}, transient (Flow A)
   const fileRef = useRef();
 
   const showToast = useCallback((msg, err = false) => {
@@ -99,8 +99,8 @@ export default function App() {
   };
 
   const updateDef = (patch) => { setDefinition(patch); setDirty(true); };
-  const setPriorFile = (revision, content) =>
-    setPriorFiles((prev) => ({ ...prev, [revision]: content }));
+  const setPriorFile = (revision, content, name) =>
+    setPriorFiles((prev) => ({ ...prev, [revision]: { content, name } }));
 
   const setMeta = (metadata) => updateDef({ ...definition, metadata });
   const setIface = (idx, iface) =>
