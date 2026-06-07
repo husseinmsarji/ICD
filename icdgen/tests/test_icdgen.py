@@ -245,3 +245,97 @@ def test_range_min_gt_max_still_fatal_when_both_present(tmp_path):
         extra="<rangeMin>10</rangeMin><rangeMax>5</rangeMax>"))
     with pytest.raises(ValidationError):
         load(p)
+
+
+# ---- pr_ticket field + change-control warning ----
+def test_pr_ticket_in_registry_and_optional():
+    from icdgen.fields import SIGNAL_FIELDS, SIGNAL_FIELDS_BY_NAME
+    assert "pr_ticket" in SIGNAL_FIELDS_BY_NAME
+    f = SIGNAL_FIELDS_BY_NAME["pr_ticket"]
+    assert f.required is False and f.xml_name == "prTicket"
+
+
+def test_pr_ticket_warns_after_rev_a(tmp_path):
+    # rev "C" signal with no prTicket -> warning; rev "A" -> no ticket warning.
+    revc = _wip_xml().replace("<revision>A</revision>", "<revision>C</revision>")
+    m, _h, warns = load(_make_xml(tmp_path, revc))
+    assert any("no PR ticket" in w.message for w in warns)
+    # baseline rev A: no ticket warning
+    m2, _h2, warns2 = load(_make_xml(tmp_path, _wip_xml()))
+    assert not any("no PR ticket" in w.message for w in warns2)
+
+
+def test_pr_ticket_present_suppresses_warning(tmp_path):
+    revc = _wip_xml(extra="<prTicket>PR-7</prTicket>").replace(
+        "<revision>A</revision>", "<revision>C</revision>")
+    m, _h, warns = load(_make_xml(tmp_path, revc))
+    assert m.interfaces[0].packets[0].signals[0].pr_ticket == "PR-7"
+    assert not any("no PR ticket" in w.message for w in warns)
+
+
+def test_pr_ticket_in_traceability():
+    model, h, _w = load(EX_XML)
+    prov = Provenance.create(h, model.schema_version)
+    csv = gen_trace.render_csv(model, prov)
+    assert "PR Ticket" in csv.splitlines()[0]
+
+
+# ---- prior-revision auto-diff summaries ----
+def test_prior_revisions_parse_and_serialize(tmp_path):
+    from icdgen.serializer import to_xml
+    body = _wip_xml().replace(
+        "<interfaces>",
+        '<priorRevisions><priorRevision revision="A" source="old.xml"/>'
+        '</priorRevisions><interfaces>', 1)
+    m, _h, _w = load(_make_xml(tmp_path, body))
+    assert len(m.prior_revisions) == 1
+    assert m.prior_revisions[0].revision == "A"
+    assert m.prior_revisions[0].source == "old.xml"
+    # round-trips through the serializer
+    assert "priorRevision" in to_xml(m)
+
+
+def test_revision_summary_computes_against_prior(tmp_path):
+    from icdgen.rev_summary import compute_revision_summaries
+    # Write an "old" file (1 signal) and a "new" file (2 signals) that links it.
+    old = _wip_xml(name="sig_a")
+    old_path = tmp_path / "old.xml"; old_path.write_text(old, encoding="utf-8")
+    new = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">'
+        '<metadata><documentId>D</documentId><documentTitle>T</documentTitle>'
+        '<program>P</program><revision>B</revision>'
+        '<revisionDate>2026-06-02</revisionDate><author>H</author>'
+        '<revisionHistory>'
+        '<entry><revision>A</revision><date>2026-06-01</date><author>H</author>'
+        '<description>init</description></entry>'
+        '<entry><revision>B</revision><date>2026-06-02</date><author>H</author>'
+        '<description>add</description></entry>'
+        '</revisionHistory></metadata>'
+        '<priorRevisions><priorRevision revision="A" source="old.xml"/></priorRevisions>'
+        '<interfaces><interface id="IF-1" busType="ARINC429" dal="A">'
+        '<name>N</name><sourceLru>A</sourceLru><destinationLru>B</destinationLru>'
+        '<owningDocument>D</owningDocument><packets><packet name="P1"><signals>'
+        '<signal name="sig_a" signalType="uint8"><updateRateHz>50</updateRateHz><units>u</units></signal>'
+        '<signal name="sig_b" signalType="uint8"><updateRateHz>50</updateRateHz><units>u</units></signal>'
+        '</signals></packet></packets></interface></interfaces></icd>'
+    )
+    new_path = tmp_path / "new.xml"; new_path.write_text(new, encoding="utf-8")
+    m, _h, _w = load(str(new_path))
+    sums = {s.revision: s.text for s in compute_revision_summaries(m, str(tmp_path))}
+    assert sums["A"] == "Initial release."
+    assert "signal" in sums["B"]  # +1 signal(s)
+
+
+def test_revision_summary_missing_source_is_graceful(tmp_path):
+    from icdgen.rev_summary import compute_revision_summaries
+    body = _wip_xml().replace("<revision>A</revision>", "<revision>B</revision>")
+    # add a second history entry so idx>0 path runs, but no priorRevisions link
+    body = body.replace(
+        "<description>d</description></entry>",
+        "<description>d</description></entry>"
+        "<entry><revision>B</revision><date>2026-06-02</date><author>H</author>"
+        "<description>x</description></entry>", 1)
+    m, _h, _w = load(_make_xml(tmp_path, body))
+    sums = compute_revision_summaries(m, str(tmp_path))  # must not raise
+    assert sums[-1].text  # has some note text

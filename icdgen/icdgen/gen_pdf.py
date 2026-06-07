@@ -6,6 +6,8 @@ HTML/CSS rendering dependencies, easing the offline + PyInstaller constraints.
 """
 from __future__ import annotations
 
+import os
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -29,7 +31,6 @@ _BLUE = colors.HexColor("#1F4E79")
 _PAGE = landscape(letter)
 
 # Full signal field set in registry order: (header, attribute, rel-width).
-# Widths are relative weights; they are normalized to the usable page width.
 _REL_WIDTH = {
     "name": 2.0, "description": 3.2, "signal_type": 1.1, "update_rate_hz": 1.0,
     "units": 1.0, "data_bits": 0.9, "xmit_bits": 0.9, "xmit_bytes": 0.9,
@@ -59,12 +60,20 @@ def _cell(value) -> str:
     return str(value)
 
 
-def build_pdf(model: IcdModel, prov: Provenance, path: str) -> None:
+def build_pdf(model: IcdModel, prov: Provenance, path: str,
+              base_dir: str | None = None) -> None:
     from reportlab import rl_config
     rl_config.invariant = 1
 
     ss = _styles()
     meta = model.metadata
+
+    rev_summaries = {}
+    if model.prior_revisions:
+        from .rev_summary import compute_revision_summaries
+        bd = base_dir if base_dir is not None else os.getcwd()
+        for rs in compute_revision_summaries(model, bd):
+            rev_summaries[rs.revision] = rs.text
 
     def _footer(canvas, doc):
         canvas.saveState()
@@ -113,10 +122,13 @@ def build_pdf(model: IcdModel, prov: Provenance, path: str) -> None:
 
     # ---- Revision history ----
     story.append(Paragraph("Revision History", ss["Heading1"]))
-    rh = [["Revision", "Date", "Author", "Description"]]
+    rh = [["Revision", "Date", "Author", "Description", "Changes in This Revision"]]
     for e in meta.revision_history:
-        rh.append([e.revision, e.date, e.author, Paragraph(e.description, ss["Cell"])])
-    rht = Table(rh, colWidths=[1.0 * inch, 1.1 * inch, 1.5 * inch, 5.5 * inch],
+        rh.append([e.revision, e.date, e.author,
+                   Paragraph(e.description, ss["Cell"]),
+                   Paragraph(rev_summaries.get(e.revision, ""), ss["Cell"])])
+    rht = Table(rh, colWidths=[0.8 * inch, 1.0 * inch, 1.3 * inch,
+                               3.1 * inch, 3.9 * inch],
                 repeatRows=1)
     rht.setStyle(_grid_style())
     story.append(rht)

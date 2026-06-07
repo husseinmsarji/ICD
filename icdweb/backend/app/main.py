@@ -182,6 +182,35 @@ def diff_definitions(payload: dict = Body(...)):
     return service.diff(old, new)
 
 
+@app.post("/api/diff-files")
+async def diff_files(old: UploadFile, new: UploadFile):
+    """Diff two uploaded XML/JSON ICD files directly. Each is parsed via the
+    authoritative loader; a parse failure on either side returns an error."""
+    async def _parse(f: UploadFile):
+        raw = await f.read()
+        sfx = ".json" if (f.filename or "").lower().endswith(".json") else ".xml"
+        with tempfile.NamedTemporaryFile("wb", suffix=sfx, delete=False) as fh:
+            fh.write(raw)
+            tmp = fh.name
+        try:
+            model, _hash, _warns = load(tmp)
+            return model_to_dto(model), None
+        except ValidationError as exc:
+            return None, {"message": exc.message, "line": exc.line}
+        finally:
+            os.unlink(tmp)
+
+    old_dto, old_err = await _parse(old)
+    if old_err:
+        return {"ok": False, "side": "old", "issue": old_err}
+    new_dto, new_err = await _parse(new)
+    if new_err:
+        return {"ok": False, "side": "new", "issue": new_err}
+    result = service.diff(old_dto, new_dto)
+    result["ok"] = True
+    return result
+
+
 @app.get("/api/projects/{project_id}/export.xml")
 def export_xml(project_id: str):
     from fastapi.responses import Response

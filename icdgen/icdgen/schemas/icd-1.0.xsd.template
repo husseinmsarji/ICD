@@ -24,6 +24,7 @@
   <xs:complexType name="IcdType">
     <xs:sequence>
       <xs:element name="metadata" type="MetadataType"/>
+      <xs:element name="priorRevisions" type="PriorRevisionsType" minOccurs="0"/>
       <xs:element name="interfaces" type="InterfacesType"/>
       <xs:element name="extensions" type="ExtensionsType" minOccurs="0"/>
     </xs:sequence>
@@ -84,6 +85,20 @@
       <xs:element name="signals" type="SignalsType"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <!-- Optional change-control linkage: map a revision letter to the source
+       file that defined the ICD at that revision, so the document can show an
+       auto-computed change summary per revision. Structural, not registry. -->
+  <xs:complexType name="PriorRevisionsType">
+    <xs:sequence>
+      <xs:element name="priorRevision" type="PriorRevisionType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="PriorRevisionType">
+    <xs:attribute name="revision" type="xs:string" use="required"/>
+    <xs:attribute name="source" type="xs:string" use="required"/>
   </xs:complexType>
 
   <!-- @INTERFACE_TYPE@ -->

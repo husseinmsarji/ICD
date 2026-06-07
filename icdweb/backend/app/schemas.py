@@ -22,6 +22,7 @@ from icdgen.model import (
     IcdModel,
     Interface,
     Metadata,
+    PriorRevision,
     RevisionEntry,
     Signal,
 )
@@ -44,6 +45,7 @@ class SignalDTO(BaseModel):
     dataBits: Optional[int] = None
     xmitBits: Optional[int] = None
     xmitBytes: Optional[int] = None
+    prTicket: Optional[str] = None
 
 
 class PacketDTO(BaseModel):
@@ -81,9 +83,15 @@ class MetadataDTO(BaseModel):
     revisionHistory: list[RevisionEntryDTO] = Field(default_factory=list)
 
 
+class PriorRevisionDTO(BaseModel):
+    revision: str
+    source: str
+
+
 class IcdDTO(BaseModel):
     schemaVersion: str = "1.0"
     metadata: MetadataDTO
+    priorRevisions: list[PriorRevisionDTO] = Field(default_factory=list)
     interfaces: list[InterfaceDTO] = Field(default_factory=list)
 
 
@@ -104,8 +112,12 @@ def dto_to_model(dto: IcdDTO) -> IcdModel:
     interfaces = tuple(
         interface_from_json_dict(i.model_dump()) for i in dto.interfaces
     )
+    prior = tuple(
+        PriorRevision(revision=p.revision, source=p.source)
+        for p in dto.priorRevisions
+    )
     return IcdModel(schema_version=dto.schemaVersion, metadata=metadata,
-                    interfaces=interfaces)
+                    interfaces=interfaces, prior_revisions=prior)
 
 
 def model_to_dto(model: IcdModel) -> IcdDTO:
@@ -124,6 +136,10 @@ def model_to_dto(model: IcdModel) -> IcdDTO:
                 for e in model.metadata.revision_history
             ],
         ),
+        priorRevisions=[
+            PriorRevisionDTO(revision=p.revision, source=p.source)
+            for p in model.prior_revisions
+        ],
         interfaces=[
             InterfaceDTO(**interface_to_json_dict(i)) for i in model.interfaces
         ],

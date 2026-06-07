@@ -84,13 +84,14 @@ def cmd_generate(args) -> int:
         p = os.path.join(out, f"{base}_traceability.xlsx")
         gen_trace.write_xlsx(model, prov, p)
         produced.append(p)
+    src_dir = os.path.dirname(os.path.abspath(args.input))
     if "docx" in formats:
         p = os.path.join(out, f"{base}.docx")
-        gen_docx.build_docx(model, prov, p)
+        gen_docx.build_docx(model, prov, p, base_dir=src_dir)
         produced.append(p)
     if "pdf" in formats:
         p = os.path.join(out, f"{base}.pdf")
-        gen_pdf.build_pdf(model, prov, p)
+        gen_pdf.build_pdf(model, prov, p, base_dir=src_dir)
         produced.append(p)
 
     _write_run_log(out, args.input, prov, produced)

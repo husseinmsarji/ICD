@@ -26,6 +26,7 @@ class Signal:
     data_bits: Optional[int] = None
     xmit_bits: Optional[int] = None
     xmit_bytes: Optional[int] = None
+    pr_ticket: Optional[str] = None
 
     @property
     def has_concrete_type(self) -> bool:
@@ -83,10 +84,20 @@ class Metadata:
 
 
 @dataclass(frozen=True)
+class PriorRevision:
+    """Maps a revision letter to the source file that defined the ICD at that
+    revision. Used to auto-compute a per-revision change summary for the
+    document header. Structural (not registry-driven)."""
+    revision: str
+    source: str
+
+
+@dataclass(frozen=True)
 class IcdModel:
     schema_version: str
     metadata: Metadata
     interfaces: tuple[Interface, ...]
+    prior_revisions: tuple[PriorRevision, ...] = ()
 
     def all_signals(self):
         """Yield (interface, packet, signal) triples in document order."""

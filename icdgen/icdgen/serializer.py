@@ -73,6 +73,13 @@ def to_xml(model: IcdModel) -> str:
         out.append("      </entry>")
     out.append("    </revisionHistory>")
     out.append("  </metadata>")
+    if model.prior_revisions:
+        out.append("  <priorRevisions>")
+        for pr in model.prior_revisions:
+            out.append(
+                f'    <priorRevision revision="{_esc(pr.revision)}" '
+                f'source="{_esc(pr.source)}"/>')
+        out.append("  </priorRevisions>")
     out.append("  <interfaces>")
     for iface in model.interfaces:
         out.extend(_interface_xml(iface, "    "))

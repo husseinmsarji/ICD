@@ -3,6 +3,7 @@ import { api } from './api.js';
 import MetadataEditor from './MetadataEditor.jsx';
 import InterfaceEditor from './InterfaceEditor.jsx';
 import GeneratePanel from './GeneratePanel.jsx';
+import DiffPanel from './DiffPanel.jsx';
 
 export default function App() {
   const [options, setOptions] = useState(null);
@@ -195,6 +196,10 @@ export default function App() {
 
             <div style={{ marginTop: 22 }}>
               <GeneratePanel projectId={activeId} definition={definition} options={options} onToast={showToast} />
+            </div>
+
+            <div style={{ marginTop: 22 }}>
+              <DiffPanel definition={definition} onToast={showToast} />
             </div>
           </>
         )}

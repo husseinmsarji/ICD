@@ -40,4 +40,24 @@ export const api = {
 
   diff: (oldDef, newDef) =>
     req('/api/diff', { method: 'POST', headers: J, body: JSON.stringify({ old: oldDef, new: newDef }) }),
+
+  diffFiles: (oldFile, newFile) => {
+    const fd = new FormData();
+    fd.append('old', oldFile);
+    fd.append('new', newFile);
+    return req('/api/diff-files', { method: 'POST', body: fd });
+  },
+
+  // Diff the current (in-memory) definition against an uploaded file.
+  diffAgainstFile: (currentDef, file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return req('/api/import', { method: 'POST', body: fd }).then((r) => {
+      if (!r.ok) throw new Error(r.issues?.[0]?.message || 'Import failed');
+      return req('/api/diff', {
+        method: 'POST', headers: J,
+        body: JSON.stringify({ old: r.definition, new: currentDef }),
+      });
+    });
+  },
 };

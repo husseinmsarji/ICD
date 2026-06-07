@@ -1,11 +1,12 @@
 """Word (DOCX) ICD generator using python-docx.
 
-Follows a standard aviation ICD structure: cover page, revision history,
-interface overview, per-interface/packet signal tables, and notes. The page is
-landscape so the full signal field set fits. The provenance stamp is written
-into the page footer for tool-qualification evidence.
+Landscape so the full signal field set fits. Cover page, revision history,
+interface overview, per-interface/packet signal tables (all registry columns),
+and notes. The provenance stamp is written into the page footer.
 """
 from __future__ import annotations
+
+import os
 
 from docx import Document
 from docx.enum.section import WD_ORIENT
@@ -51,7 +52,7 @@ def _shade_header_row(row) -> None:
 
 
 def _cell(value) -> str:
-    """Render any field value into a document cell string."""
+    """Render any field value into a document cell string (None -> blank)."""
     if value is None:
         return ""
     if isinstance(value, bool):
@@ -61,10 +62,10 @@ def _cell(value) -> str:
     return str(value)
 
 
-def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
+def build_docx(model: IcdModel, prov: Provenance, path: str,
+               base_dir: str | None = None) -> None:
     doc = Document()
 
-    # Landscape so the full signal field set fits across the page.
     section = doc.sections[0]
     section.orientation = WD_ORIENT.LANDSCAPE
     section.page_width, section.page_height = section.page_height, section.page_width
@@ -76,6 +77,14 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
     style.font.size = Pt(10)
 
     meta = model.metadata
+
+    # Per-revision auto-diff summaries (empty dict when no priorRevisions).
+    rev_summaries = {}
+    if model.prior_revisions:
+        from .rev_summary import compute_revision_summaries
+        bd = base_dir if base_dir is not None else os.getcwd()
+        for rs in compute_revision_summaries(model, bd):
+            rev_summaries[rs.revision] = rs.text
 
     # ---- Cover page ----
     title = doc.add_paragraph()
@@ -114,10 +123,11 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
 
     # ---- Revision history ----
     doc.add_heading("Revision History", level=1)
-    rh = doc.add_table(rows=1, cols=4)
+    rh = doc.add_table(rows=1, cols=5)
     rh.style = "Table Grid"
     hdr = rh.rows[0].cells
-    for i, label in enumerate(["Revision", "Date", "Author", "Description"]):
+    for i, label in enumerate(["Revision", "Date", "Author", "Description",
+                               "Changes in This Revision"]):
         hdr[i].paragraphs[0].add_run(label)
     _shade_header_row(rh.rows[0])
     for e in meta.revision_history:
@@ -126,6 +136,7 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
         cells[1].text = e.date
         cells[2].text = e.author
         cells[3].text = e.description
+        cells[4].text = rev_summaries.get(e.revision, "")
 
     # ---- Interface overview ----
     doc.add_heading("Interface Overview", level=1)
@@ -167,8 +178,7 @@ def build_docx(model: IcdModel, prov: Provenance, path: str) -> None:
             tbl = doc.add_table(rows=1, cols=len(_SIGNAL_COLS))
             tbl.style = "Table Grid"
             for i, (label, _attr) in enumerate(_SIGNAL_COLS):
-                cell = tbl.rows[0].cells[i]
-                cell.paragraphs[0].add_run(label)
+                tbl.rows[0].cells[i].paragraphs[0].add_run(label)
             _shade_header_row(tbl.rows[0])
             for sig in pkt.signals:
                 cells = tbl.add_row().cells

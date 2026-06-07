@@ -188,6 +188,16 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
         ui_width="tiny", ui_numeric=True,
         emit_if=lambda v: v != 0.0,
     ),
+    FieldSpec(
+        # Freeform change-control ticket that last touched this signal (e.g. a
+        # PR/Jira id). Optional in the schema; a non-fatal WARNING is raised by
+        # loader._semantic_checks when a signal has no ticket and the ICD
+        # revision is not the initial "A". Emitted only when non-empty.
+        name="pr_ticket", xml_name="prTicket", json_name="prTicket",
+        label="PR Ticket", py_type=str, xml_location=XML_ELEMENT, required=False,
+        default=None, ui_width="auto",
+        emit_if=lambda v: bool(v),
+    ),
 )
 
 SIGNAL_FIELDS_BY_NAME: dict[str, FieldSpec] = {f.name: f for f in SIGNAL_FIELDS}

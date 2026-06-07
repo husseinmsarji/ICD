@@ -27,6 +27,7 @@ from .model import (
     IcdModel,
     Interface,
     Metadata,
+    PriorRevision,
     RevisionEntry,
     Signal,
 )
@@ -144,10 +145,18 @@ def _model_from_xml(root: etree._Element) -> IcdModel:
             parse_interface_xml(iface_el, XSD_NAMESPACE, _text, packets)
         )
 
+    prior = []
+    pr_el = root.find(_q("priorRevisions"))
+    if pr_el is not None:
+        for e in pr_el.findall(_q("priorRevision")):
+            prior.append(PriorRevision(revision=e.get("revision"),
+                                       source=e.get("source")))
+
     return IcdModel(
         schema_version=schema_version,
         metadata=metadata,
         interfaces=tuple(interfaces),
+        prior_revisions=tuple(prior),
     )
 
 
@@ -209,6 +218,18 @@ def _json_schema() -> dict:
         "properties": {
             "schemaVersion": {"type": "string", "pattern": "^1\\.[0-9]+$"},
             "metadata": metadata,
+            "priorRevisions": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["revision", "source"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "revision": {"type": "string", "minLength": 1},
+                        "source": {"type": "string", "minLength": 1},
+                    },
+                },
+            },
             "interfaces": {"type": "array", "minItems": 1, "items": interface},
             "extensions": {"type": "object"},
         },
@@ -267,10 +288,15 @@ def _model_from_json(data: dict) -> IcdModel:
         revision_history=history,
     )
     interfaces = [interface_from_json_dict(i) for i in data["interfaces"]]
+    prior = tuple(
+        PriorRevision(revision=pr["revision"], source=pr["source"])
+        for pr in data.get("priorRevisions", [])
+    )
     return IcdModel(
         schema_version=data["schemaVersion"],
         metadata=metadata,
         interfaces=tuple(interfaces),
+        prior_revisions=prior,
     )
 
 
@@ -281,6 +307,11 @@ def _semantic_checks(model: IcdModel, source: str) -> list[ValidationWarning]:
     """FATAL problems raise ValidationError. NON-FATAL problems are returned as
     a list of ValidationWarning so a partially-complete ICD can still load."""
     warnings: list[ValidationWarning] = []
+
+    # Change-control gate: tickets are expected for any revision past the
+    # initial "A" (case-insensitive compare; blank revision is treated as "A").
+    _rev = (model.metadata.revision or "A").strip().upper()
+    _rev_requires_ticket = _rev not in ("", "A")
 
     if model.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValidationError(
@@ -325,6 +356,12 @@ def _semantic_checks(model: IcdModel, source: str) -> list[ValidationWarning]:
                     warnings.append(ValidationWarning(
                         f"Signal name '{where}' is not a valid C identifier; "
                         f"it will not compile in the generated C header as-is."))
+                # Change-control: every signal in a post-Rev-A ICD should cite
+                # the PR/ticket that last touched it. Non-fatal so drafts load.
+                if _rev_requires_ticket and not sig.pr_ticket:
+                    warnings.append(ValidationWarning(
+                        f"Signal '{where}' has no PR ticket; change control "
+                        f"expects a ticket for revisions after 'A'."))
     return warnings
 
 
