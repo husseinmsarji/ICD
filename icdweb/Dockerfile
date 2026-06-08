@@ -17,6 +17,11 @@ WORKDIR /app
 COPY icdgen/ /opt/icdgen/
 RUN pip install --no-cache-dir /opt/icdgen
 
+# Install reqgen (depends on icdgen, already installed above). The reqgen config
+# editor in the backend imports reqgen as a library, so it must be on the path.
+COPY reqgen/ /opt/reqgen/
+RUN pip install --no-cache-dir /opt/reqgen
+
 # Backend deps.
 COPY icdweb/backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
@@ -30,7 +35,8 @@ COPY --from=frontend /fe/dist /app/static
 ENV ICDGEN_DATA_DIR=/data \
     ICDGEN_STATIC_DIR=/app/static \
     ICDGEN_CORS_ORIGINS=* \
-    PORT=8000
+    PORT=8000 \
+    REQGEN_CONFIG=/data/reqgen.json
 EXPOSE 8000
 VOLUME ["/data"]
 
