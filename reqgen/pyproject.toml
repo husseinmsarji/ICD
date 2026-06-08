@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reqgen"
+version = "0.1.0"
+description = "Deterministic requirement generator over an icdgen ICD"
+requires-python = ">=3.10"
+dependencies = ["icdgen"]
+
+[project.scripts]
+reqgen = "reqgen.cli:main"
+
+[tool.setuptools]
+packages = ["reqgen"]

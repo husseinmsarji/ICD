@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+reqgen/__init__.py
+reqgen/__main__.py
+reqgen/cli.py
+reqgen/config_io.py
+reqgen/config_schema.py
+reqgen/export.py
+reqgen/generate.py
+reqgen/provenance.py
+reqgen.egg-info/PKG-INFO
+reqgen.egg-info/SOURCES.txt
+reqgen.egg-info/dependency_links.txt
+reqgen.egg-info/entry_points.txt
+reqgen.egg-info/requires.txt
+reqgen.egg-info/top_level.txt
+tests/test_reqgen.py
