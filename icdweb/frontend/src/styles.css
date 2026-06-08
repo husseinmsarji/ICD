@@ -302,3 +302,72 @@ select { cursor: pointer; }
 }
 .packet-name:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(69,199,224,.25); }
 .packet-body { padding: 12px; }
+
+/* ---- Top-bar tabs ---- */
+.tabs { display: flex; gap: 4px; }
+.tab {
+  background: transparent; color: var(--ink-2);
+  border: 1px solid transparent; border-bottom: 2px solid transparent;
+  border-radius: var(--r) var(--r) 0 0;
+  padding: 6px 14px; font-size: 12px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.tab:hover { color: var(--ink-1); background: var(--bg-2); }
+.tab.active { color: var(--phos); border-bottom-color: var(--phos); }
+ 
+/* ---- Aspect rows ---- */
+.aspect-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg-2);
+}
+.aspect-row:last-child { border-bottom: none; }
+ 
+/* ---- Bright-line violation banner (inline, under a template input) ---- */
+.bright-line-warn {
+  margin-top: 5px;
+  padding: 6px 9px;
+  font-family: var(--mono); font-size: 11px; line-height: 1.4;
+  color: var(--red);
+  background: rgba(255, 92, 92, .07);
+  border: 1px solid rgba(255, 92, 92, .3);
+  border-left: 2px solid var(--red);
+  border-radius: var(--r);
+}
+ 
+/* ---- Reconcile impact strip (draft vs saved) ---- */
+.recon-strip {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-top: 12px; padding: 8px 12px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--violet);
+  border-radius: var(--r);
+  font-family: var(--mono); font-size: 12px;
+}
+.recon-strip .ok { color: var(--phos); }
+.recon-strip .bad { color: var(--red); }
+.recon-strip .violet { color: var(--violet); }
+ 
+/* generic violet utility (matches the diff-viewer 'modified' hue) */
+.violet { color: var(--violet); }
+ 
+/* ---- Override editor blocks ---- */
+.ovr-section {
+  padding: 12px;
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+}
+.ovr-card {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--cyan);
+  border-radius: var(--r);
+}
+.ovr-card:first-of-type { margin-top: 0; }
+ 
+/* small chips used for suppress toggles reuse .chk; tighten spacing here */
+.ovr-card .checkbox-row .chk { padding: 3px 8px; }

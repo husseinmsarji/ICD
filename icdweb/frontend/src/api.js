@@ -6,8 +6,15 @@ const J = { 'Content-Type': 'application/json' };
 async function req(path, opts = {}) {
   const res = await fetch(path, opts);
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+    // Prefer FastAPI's {detail: ...} message when present (e.g. a 400 from a
+    // bright-line config violation), so the UI can show the specific reason.
+    let detail = '';
+    try {
+      const j = await res.clone().json();
+      if (j && j.detail) detail = j.detail;
+    } catch { /* not json */ }
+    if (!detail) detail = await res.text().catch(() => '');
+    throw new Error(detail || `${res.status} ${res.statusText}`);
   }
   const ct = res.headers.get('content-type') || '';
   return ct.includes('application/json') ? res.json() : res.text();
@@ -66,4 +73,18 @@ export const api = {
     URL.revokeObjectURL(url);
     return filename;
   },
+
+  // ---- reqgen config editor ----
+  // The config file is the single record of truth; these mirror it. `saveReqgenConfig`
+  // is the only mutating call and the backend rejects (400) a bright-line violation.
+  reqgenMeta: () => req('/api/reqgen/meta'),
+  reqgenConfig: () => req('/api/reqgen/config'),
+  saveReqgenConfig: (config) =>
+    req('/api/reqgen/config', { method: 'PUT', headers: J, body: JSON.stringify({ config }) }),
+  reqgenPreview: (config, icd) =>
+    req('/api/reqgen/preview', { method: 'POST', headers: J,
+      body: JSON.stringify({ config, ...icd }) }),   // icd = {icdProjectId} | {icdXml}
+  reqgenReconcile: (config, icd) =>
+    req('/api/reqgen/reconcile', { method: 'POST', headers: J,
+      body: JSON.stringify({ config, ...icd }) }),
 };

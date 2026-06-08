@@ -4,11 +4,16 @@ schema. You never hand-write the file from scratch; reqgen writes a fully
 populated default, and edits (CLI or UI) round-trip through it.
 
 Design mirrors icdgen's field-registry philosophy: declare the knobs once, derive
-the file, the validation, and (later) the UI descriptor from that one place.
+the file, the validation, and the UI descriptor from that one place.
 
 THE BRIGHT LINE (DO-330): templates substitute ONLY ICD field values. They
 transcribe structural facts (type/range/rate/...); they must never encode
 engineering intent. Behavioral requirements stay human-authored in the RM tool.
+
+Each aspect declares the exact ICD fields it is ALLOWED to transcribe (its
+`fields`). The UI and the save path enforce that a template's {placeholders}
+stay within that set (plus the structural ID tokens), so a TYPE requirement can
+never quietly start pulling in, say, {dal} — that would cross the bright line.
 """
 from __future__ import annotations
 
@@ -88,10 +93,16 @@ L3_ASPECTS: tuple[str, ...] = tuple(a.key for a in ASPECTS if a.level == "L3")
 L4_ASPECTS: tuple[str, ...] = tuple(a.key for a in ASPECTS if a.level == "L4")
 GRANULARITIES: tuple[str, ...] = ("packet", "port")
 
+# ID-format tokens. These are structural locators (not ICD content), so they
+# are always allowed in an id_format string regardless of aspect.
+ID_FORMAT_TOKENS: tuple[str, ...] = (
+    "prefix", "iface", "packet", "signal", "aspect",
+)
+
 
 # ---------------------------------------------------------------------------
 # CONFIG MODEL — the in-memory shape of the config file. Built by code (the
-# default generator below), edited via CLI/UI, serialized to YAML/JSON.
+# default generator below), edited via CLI/UI, serialized to JSON.
 # ---------------------------------------------------------------------------
 @dataclass
 class SignalOverride:
@@ -135,3 +146,83 @@ def default_config() -> ReqConfig:
     reqgen writes when no config file exists yet — so the user never starts from
     a blank file."""
     return ReqConfig()
+
+
+# ---------------------------------------------------------------------------
+# Bright-line placeholder enforcement.
+#
+# A template may only reference the placeholders its aspect declares. The L3
+# `iface`/`packet`/`bus_type`/`dal` and L4 `signal`/... names come from the
+# aspect's `fields`. This is the mechanism that keeps a TYPE requirement from
+# silently transcribing, e.g., {dal}: the field is not in TYPE.fields, so a
+# template using it is rejected (see config_io._validate / the web layer).
+# ---------------------------------------------------------------------------
+import string as _string
+
+
+def template_placeholders(template: str) -> list[str]:
+    """Return the {placeholder} names referenced by a template string.
+
+    Uses the same parser as str.format, so it sees exactly what generation will
+    try to substitute. Positional/empty fields ('{}') are reported as '' so the
+    caller can reject them (generation needs named fields).
+    """
+    names: list[str] = []
+    for _literal, field_name, _spec, _conv in _string.Formatter().parse(template):
+        if field_name is None:
+            continue
+        # Take the base name before any attribute/index access ('a.b' -> 'a').
+        base = field_name.split(".")[0].split("[")[0]
+        names.append(base)
+    return names
+
+
+def allowed_placeholders(aspect_key: str) -> tuple[str, ...]:
+    """The placeholders a template for this aspect may use."""
+    return ASPECTS_BY_KEY[aspect_key].fields
+
+
+def invalid_placeholders(aspect_key: str, template: str) -> list[str]:
+    """Placeholders in `template` that are NOT allowed for `aspect_key`.
+
+    An empty list means the template is bright-line-clean. A non-empty list is
+    the set of offending names (including '' for a bare '{}'). The caller turns
+    this into a fatal ConfigError on save and a preview guard.
+    """
+    allowed = set(allowed_placeholders(aspect_key))
+    bad: list[str] = []
+    for name in template_placeholders(template):
+        if name == "" or name not in allowed:
+            if name not in bad:
+                bad.append(name)
+    return bad
+
+
+# ---------------------------------------------------------------------------
+# UI / API descriptor: JSON-serializable description of the config schema,
+# consumed by the reqgen editor so it builds itself from the aspect registry
+# (adding an aspect here surfaces it in the UI with no UI edit), exactly like
+# icdgen.fields.signal_fields_descriptor() drives the ICD form.
+# ---------------------------------------------------------------------------
+def config_descriptor() -> dict:
+    """Everything the UI needs to render and validate the config editor."""
+    aspects = []
+    for a in ASPECTS:
+        aspects.append({
+            "key": a.key,
+            "level": a.level,
+            "label": a.label,
+            "fields": list(a.fields),            # = allowed template placeholders
+            "defaultTemplate": a.default_template,
+            "defaultOn": a.default_on,
+        })
+    return {
+        "aspects": aspects,
+        "l3Aspects": list(L3_ASPECTS),
+        "l4Aspects": list(L4_ASPECTS),
+        "granularities": list(GRANULARITIES),
+        "idFormatTokens": list(ID_FORMAT_TOKENS),
+        # Default formats so the UI can offer a one-click "reset to default".
+        "defaultIdFormatL3": ReqConfig().id_format_l3,
+        "defaultIdFormatL4": ReqConfig().id_format_l4,
+    }

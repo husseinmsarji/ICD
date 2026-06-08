@@ -13,43 +13,65 @@
 
 ---
 
-## 0. ⚠️ LIVE ISSUE TO FIX FIRST — XSD template drift ("stale schema")
+## 0. ⚠️ LIVE ISSUE TO FIX FIRST — test suite references deleted example files
 
-**Status: OPEN in the current tree.** The repo was restored from a GitHub
-version that does NOT contain the permanent fix, so this bug is live again.
+**Status: OPEN in the current tree.** The schema-template stale bug (the
+previous section-0 item) is **RESOLVED** — see section 0.1. The remaining live
+problem is a leftover from the GitHub restore: `tests/test_icdgen.py` still
+points at example files that no longer exist.
 
-**Symptom.** `icdgen validate <revB/revC>` or `reqgen generate <revB/revC>`
-fails with:
-`Element '{urn:icdgen:icd:1.0}priorRevisions': This element is not expected.`
+**Symptom.** `cd icdgen && python -m pytest tests/ -q` errors during
+collection / at runtime with `FileNotFoundError` (or a failing `open(...)`)
+because three referenced files are gone:
+- line 21:  `EX_XML = os.path.join(ROOT, "examples", "icd_example.xml")`
+- line 350: `demo = os.path.join(ROOT, "examples", "icd_demo.xml")`
+- line 351: `revd = os.path.join(ROOT, "examples", "icd_demo_revD.xml")`
 
-**Root cause.** The XSD template exists in TWO files that must be hand-synced:
-- `icdgen/schemas/icd-1.0.xsd.template` (repo root)
-- `icdgen/icdgen/schemas/icd-1.0.xsd.template` (inside the package)
+The `examples/` dir now contains ONLY `icd_evtol_revA.xml`, `icd_evtol_revB.xml`,
+and `icd_evtol_revC.xml`. The old `icd_demo*` / `icd_example` files were removed
+when the eVTOL examples were put in place, but the test file's references were
+not updated (the restore reverted the test edits while keeping — or
+re-receiving — the eVTOL examples).
 
-`resources.xsd_template_path()` resolves the **repo-root** copy first. When that
-copy is the stale one (missing the `priorRevisions` element added in 1.6.0),
-validation rejects any ICD that links prior revisions. The recurring manual
-workaround is `copy icdgen\icdgen\schemas\icd-1.0.xsd.template icdgen\schemas\icd-1.0.xsd.template`,
-which only re-syncs until the next edit.
+**The fix (apply next):** re-point the tests at the eVTOL examples.
+1. `EX_XML` → `examples/icd_evtol_revA.xml` (the single-interface baseline that
+   stands in for the old `icd_example.xml`). NOTE: revA has **3** interfaces, not
+   1 — so `test_valid_xml_loads`'s `assert len(model.interfaces) == 1` must
+   become `== 3`. Audit every `EX_XML`-based assertion (interface/packet/signal
+   counts, the `if_nav_state_position_t` struct-name check still holds since
+   revA keeps `IF-NAV-STATE` / `POSITION`).
+2. `test_diff_pdf_report_builds_and_is_deterministic`: `demo` → `icd_evtol_revB.xml`,
+   `revd` → `icd_evtol_revC.xml` (a real B→C diff with adds/removes/mods).
+3. `test_diff_pdf_report_no_changes` uses `EX_XML` diffed against itself — fine
+   once `EX_XML` resolves.
+4. Re-confirm the expected count after the edits (was 36 with the old examples
+   + the now-removed `test_schema_template_copies_in_sync`; recount after the
+   re-point — see section 13).
 
-**Permanent fix (single-source the template — net-negative line count):**
-1. Rewrite `icdgen/icdgen/resources.py` so `xsd_template_path()` resolves ONLY
-   the package copy (`here/schemas/icd-1.0.xsd.template`), plus the MEIPASS path
-   for a PyInstaller bundle. Drop the repo-root candidate.
-2. Delete the repo-root `icdgen/schemas/icd-1.0.xsd.template` (and the now-empty
-   `icdgen/schemas/` dir).
-3. Fix `icdgen.spec` datas: bundle `('icdgen/schemas/icd-1.0.xsd.template',
-   'icdgen/schemas')` (the old line referenced a stale `('schemas/icd-1.0.xsd',
-   'schemas')` path that no longer exists).
-4. Remove the now-pointless `test_schema_template_copies_in_sync` from
-   `tests/test_icdgen.py` (there is only one copy; nothing can drift).
-5. `pyproject.toml [tool.setuptools.package-data]` already ships
-   `schemas/*.template`; verify and drop the stale trailing comment that
-   describes the two-layout scheme.
+Until this is done the icdgen suite cannot run to completion.
 
-The template is package data, so one copy serves source checkouts, pip wheels,
-and PyInstaller bundles alike. After this fix the `copy` command is never needed
-again, and the "Schema note" in section 3 ("it cannot drift") becomes true.
+### 0.1. RESOLVED — XSD template drift ("stale schema") single-sourced
+The recurring `Element '{urn:icdgen:icd:1.0}priorRevisions': This element is not
+expected.` failure is **fixed**. The XSD template now exists as exactly ONE
+physical file — package data at `icdgen/icdgen/schemas/icd-1.0.xsd.template`.
+What changed:
+- `resources.xsd_template_path()` resolves ONLY the package copy
+  (`here/schemas/icd-1.0.xsd.template`), plus the `sys._MEIPASS/icdgen/schemas/`
+  path for a PyInstaller bundle. The old repo-root candidate and the `_base_dir`
+  helper are gone.
+- The repo-root `icdgen/schemas/icd-1.0.xsd.template` and the (now-empty)
+  `icdgen/schemas/` dir were deleted.
+- `icdgen.spec` bundles `('icdgen/schemas/icd-1.0.xsd.template',
+  'icdgen/schemas')` (the old stale `('schemas/icd-1.0.xsd', 'schemas')` line is
+  gone).
+- `pyproject.toml [tool.setuptools.package-data]` ships `schemas/*.template`
+  (the dead `schemas/*.xsd` glob and the two-layout comment were removed).
+- `test_schema_template_copies_in_sync` was removed from `tests/test_icdgen.py`
+  (one copy → nothing to drift).
+
+The manual `copy icdgen\icdgen\schemas\... icdgen\schemas\...` workaround is no
+longer needed and must not be reintroduced. The "Schema note" in section 3 is
+now literally true: the template cannot drift, because there is only one.
 
 ---
 
@@ -88,14 +110,14 @@ again, and the "Schema note" in section 3 ("it cannot drift") becomes true.
   (c) a standalone **PDF diff report** for comparing two arbitrary files
   (`gen_diff_pdf.py`, CLI `diff -o`, web `POST /api/diff-report`) (Flow B).
   Details in section 9.5.
-- **Post-1.6.0 work (this session, no version bump — verify which are present
-  in the current restored tree before relying on them):**
+- **Post-1.6.0 work (no version bump):**
   * **reqgen** added as a separate sibling tool (section 15).
   * Demo examples replaced with three revisions of one ICD,
     `ICD-EVTOL-AVS-200` (`icd_evtol_revA/B/C.xml`); old `icd_demo*` /
-    `icd_example` files removed.
-  * Schema single-sourcing fix (section 0) — **NOT applied in the restored
-    tree; this is the live open item.**
+    `icd_example` files removed. **PRESENT in the current tree.**
+  * Schema single-sourcing fix (section 0.1) — **APPLIED in the current tree.**
+  * **NOT yet done:** the test file's example references still point at the
+    removed `icd_demo*`/`icd_example` files — the live open item (section 0).
 
 ---
 
@@ -133,14 +155,16 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 ├── icdgen/                       ← CORE library + CLI (pip-installable)
 │   ├── pyproject.toml            packaging; EXACT-pinned runtime deps
 │   ├── requirements.txt
-│   ├── icdgen.spec               PyInstaller build spec
+│   ├── icdgen.spec               PyInstaller build spec (bundles the package
+│   │                             copy of the XSD template)
 │   ├── run.py / pyi_rth_docx.py  PyInstaller entry + runtime hook
 │   ├── README.md
 │   ├── examples/
 │   │   ├── icd_evtol_revA.xml          initial release (3 if / 3 pkt / 9 sig)
 │   │   ├── icd_evtol_revB.xml          adds AHRS bus; links revA
-│   │   └── icd_evtol_revC.xml      ★   current (6 if / 9 pkt / 31 sig); links revB
-│   ├── tests/test_icdgen.py
+│   │   └── icd_evtol_revC.xml      ★   current (6 if / 8 pkt / 31 sig); links revB
+│   ├── tests/test_icdgen.py            ⚠ still references deleted icd_demo* /
+│   │                                   icd_example files (section 0)
 │   └── icdgen/                   ← the importable package
 │       ├── __init__.py / __main__.py
 │       ├── cli.py                argparse CLI: validate | generate | diff
@@ -155,6 +179,7 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 │       ├── serializer.py         IcdModel -> canonical XML (emits priorRevisions)
 │       ├── provenance.py         tool/version/hash stamp (timestamp-free)
 │       ├── resources.py          schema template + Jinja dir resolution
+│       │                         (single-source: package copy + MEIPASS only)
 │       ├── gen_code.py           C header + Simulink .m (Jinja2); MISRA helpers
 │       ├── gen_docx.py           DOCX ICD; landscape; revision table has the
 │       │                         "Change Summary Report" column
@@ -164,8 +189,12 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 │       ├── rev_summary.py   ★    per-revision change summaries (Flow A)
 │       ├── diff.py               version diff engine + text/CSV reports
 │       ├── ooxml_determinism.py  ZIP-normalizes .docx/.xlsx
-│       ├── schemas/icd-1.0.xsd.template  ★ THE one XSD template (package data)
+│       ├── schemas/icd-1.0.xsd.template  ★ THE one XSD template (package data,
+│       │                                  single source — cannot drift)
 │       └── templates/header.h.j2, simulink_bus.m.j2
+│
+│   (NOTE: the old repo-root icdgen/schemas/ dir and its template copy were
+│    DELETED by the single-sourcing fix. Do not recreate them.)
 │
 ├── icdweb/                       ← WEB app (FastAPI + React)
 │   ├── Dockerfile, docker-compose.yml, README.md
@@ -174,7 +203,7 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 │   │   │                         /api/diff-report (PDF download)
 │   │   ├── schemas.py            DTOs incl. prTicket + PriorRevisionDTO
 │   │   └── service.py            project storage; validate/generate/diff
-│   │   └── tests/test_api.py     8 tests
+│   │   └── tests/test_api.py     8 tests (⚠ see section 13 re: icd_demo refs)
 │   └── frontend/src/
 │       ├── App.jsx               shell; renders DiffPanel (open + empty states)
 │       ├── MetadataEditor.jsx, InterfaceEditor.jsx ★, PacketEditor.jsx,
@@ -187,7 +216,7 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
     ├── pyproject.toml            packages = ["reqgen"]; depends on icdgen
     ├── README.md
     ├── config/reqgen.json        the config of record (committed)
-    ├── tests/test_reqgen.py      16 tests
+    ├── tests/test_reqgen.py      tests (⚠ see section 13 re: icd_demo refs)
     └── reqgen/                   ← the importable package
         ├── __init__.py / __main__.py
         ├── cli.py                init | generate | reconcile
@@ -202,12 +231,13 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 
 > **Schema note.** The full XSD is assembled in memory at load time from the
 > template + both registries (`resources.compiled_xsd()`); it cannot drift from
-> the registries. **NOTE:** the template itself currently exists in TWO physical
-> files that CAN drift — see section 0 for the open fix that single-sources it.
+> the registries. The template itself now exists as exactly ONE physical file
+> (package data at `icdgen/icdgen/schemas/icd-1.0.xsd.template`), so it cannot
+> drift across layouts either — one copy serves source checkouts, pip wheels,
+> and PyInstaller bundles. (This was the section-0 stale bug; it is fixed.)
 > **Filename casing:** `App.jsx` imports `./DiffPanel.jsx` (capital P); the file
 > must be committed with that exact casing or the Linux Docker build fails to
-> resolve the import (case-insensitive Windows/macOS hide this). FIXED in the
-> current GitHub-restored tree.
+> resolve the import (case-insensitive Windows/macOS hide this).
 
 ★ = the files that make "add a field in one place" work.
 
@@ -410,24 +440,35 @@ byte baseline after any core change.
   non-fatal).
 - **Change the revision summary wording / grouping:** `rev_summary.py`.
 - **Restyle the diff PDF:** `gen_diff_pdf.py` (one file, self-contained).
-- **New schema version:** add `icd-1.1.xsd.template` beside the 1.0 one, register
-  in `loader.SUPPORTED_SCHEMA_VERSIONS`, keep 1.0 working.
+- **New schema version:** add `icd-1.1.xsd.template` beside the 1.0 one (inside
+  the package `schemas/` dir — the single home), register in
+  `loader.SUPPORTED_SCHEMA_VERSIONS`, keep 1.0 working.
 - **New API endpoint:** `service.py` fn + thin `main.py` route + `api.js` method.
 - **New reqgen aspect:** one `AspectSpec` in `reqgen/config_schema.py` (sec 15).
+- **Edit the XSD template:** there is now ONE file
+  (`icdgen/icdgen/schemas/icd-1.0.xsd.template`). No second copy to sync.
 
 ---
 
 ## 13. Build / run / test quick reference
 
 - **Install (core):** `pip install -e ./icdgen`
-- **Core tests:** `cd icdgen && python -m pytest tests/ -q` -> **36 passed**
-  (was 33 before the eVTOL examples + change-control tests).
+- **Core tests:** `cd icdgen && python -m pytest tests/ -q`
+  ⚠ **Will error until section-0 is fixed** (tests reference deleted
+  `icd_example.xml` / `icd_demo.xml` / `icd_demo_revD.xml`). After re-pointing
+  them at the eVTOL examples, recount the expected total (the previous "36"
+  baseline included the now-removed `test_schema_template_copies_in_sync`, so
+  expect one fewer from that removal, before adjusting for any test edits).
 - **Backend tests:**
-  `cd icdweb/backend && ICDGEN_DATA_DIR=/tmp/t python -m pytest tests/ -q` ->
-  **8 passed**
+  `cd icdweb/backend && ICDGEN_DATA_DIR=/tmp/t python -m pytest tests/ -q`
+  ⚠ `test_api.py::test_generate_with_prior_file_fills_summary` references
+  `icd_demo_revD.xml` and `icd_demo.xml`; re-point at `icd_evtol_revC.xml` /
+  `icd_evtol_revB.xml` (and update the asserted added-signal name, which is
+  `vertical_speed` today and would become e.g. `vel_north` for the eVTOL pair).
 - **reqgen tests:**
-  `cd icdgen && PYTHONPATH=../reqgen python -m pytest ../reqgen/tests/ -q` ->
-  **16 passed**
+  `cd icdgen && PYTHONPATH=../reqgen python -m pytest ../reqgen/tests/ -q`
+  ✓ Already targets `icd_evtol_revC.xml` / `icd_evtol_revB.xml` (DEMO/REVB) —
+  this suite is consistent with the eVTOL examples.
 - **Frontend build:** `cd icdweb/frontend && npm install && npm run build`
 - **Docker (from repo root):**
   `docker compose -f icdweb/docker-compose.yml up --build` -> http://localhost:8000
@@ -504,25 +545,27 @@ to the ICD. Build sequence: core + CLI done; ReqIF/UI deferred.
 
 ## 16. Next steps (priority order)
 
-1. **Apply the section-0 schema single-sourcing fix** — the live "stale" bug.
-   Until then, `validate`/`generate` on revB/revC fails unless the two template
-   copies happen to be in sync.
-2. **Re-verify the restored tree** actually contains: the eVTOL examples, the
-   updated `test_icdgen.py` (EX_XML -> revA; 1->3 interface assertion; diff-PDF
-   tests -> revB/revC), reqgen, and the corrected docs. The GitHub restore may
-   have reverted some of these — paste `resources.py`, `tests/test_icdgen.py`,
-   and a tree listing to confirm, then re-apply only what's missing.
-3. **Confirm green:** icdgen 36, reqgen 16, backend 8; determinism holds; revC
-   validates.
-4. **ReqIF / tool-specific reqgen exporter** — blocked on naming the target RM
+1. **Re-point `tests/test_icdgen.py` at the eVTOL examples** — the live open
+   item (section 0). `EX_XML` -> revA (fix the `== 1` interface assertion to
+   `== 3`), diff-PDF tests -> revB/revC. Then do the same for
+   `icdweb/backend/tests/test_api.py` (`icd_demo*` -> `icd_evtol_*`).
+2. **Confirm green:** icdgen (recounted total), reqgen 16, backend 8;
+   determinism holds; revC validates (now that the schema single-sourcing fix is
+   in, `validate`/`generate` on revB/revC succeed — the `priorRevisions`
+   rejection is gone).
+3. **ReqIF / tool-specific reqgen exporter** — blocked on naming the target RM
    tool (DOORS / Jama / Polarion / etc.).
-5. **reqgen UI** as a file-editor over `config/reqgen.json` (deferred until the
+4. **reqgen UI** as a file-editor over `config/reqgen.json` (deferred until the
    config schema settles; must remain a view over the file, never a 2nd source
    of state).
-6. **Optional:** relabel "PR Ticket" -> "AVS" across the toolchain (deliberate).
+5. **Optional:** relabel "PR Ticket" -> "AVS" across the toolchain (deliberate).
 
 ### Resolved this session
+- **XSD template single-sourcing** — applied. `resources.py` resolves only the
+  package copy (+ MEIPASS); repo-root `icdgen/schemas/` deleted; `icdgen.spec`
+  and `pyproject.toml` updated; `test_schema_template_copies_in_sync` removed.
+  The `priorRevisions`-rejection "stale schema" failure is gone.
 - **DiffPanel.jsx casing** — fixed (GitHub restore has the capital-P filename).
 - **reqgen** built end-to-end (init/generate/reconcile, CSV exporter, four-state
   reconcile, dual-hash provenance).
-- **Examples** replaced with the 3-revision eVTOL ICD.
+- **Examples** are the 3-revision eVTOL ICD (`icd_evtol_revA/B/C.xml`).

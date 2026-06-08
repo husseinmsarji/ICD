@@ -4,6 +4,7 @@ import MetadataEditor from './MetadataEditor.jsx';
 import InterfaceEditor from './InterfaceEditor.jsx';
 import GeneratePanel from './GeneratePanel.jsx';
 import DiffPanel from './DiffPanel.jsx';
+import ReqgenPanel from './ReqgenPanel.jsx';
 
 export default function App() {
   const [options, setOptions] = useState(null);
@@ -17,6 +18,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [priorFiles, setPriorFiles] = useState({});  // {revision: {content, name}}, transient (Flow A)
+  const [view, setView] = useState('editor');    // 'editor' | 'reqgen'
   const fileRef = useRef();
 
   const showToast = useCallback((msg, err = false) => {
@@ -41,6 +43,7 @@ export default function App() {
     setValid(null);
     setIssues([]);
     setPriorFiles({});
+    setView('editor');
   };
 
   const newProject = async () => {
@@ -135,17 +138,25 @@ export default function App() {
       </div>
 
       <div className="topbar">
-        {definition ? (
+        <div className="tabs">
+          <button className={`tab ${view === 'editor' ? 'active' : ''}`} onClick={() => setView('editor')}>
+            ICD Editor
+          </button>
+          <button className={`tab ${view === 'reqgen' ? 'active' : ''}`} onClick={() => setView('reqgen')}>
+            Requirements (reqgen)
+          </button>
+        </div>
+        <span className="spacer" />
+        {view === 'editor' && definition && (
           <>
             <input value={projectName} onChange={(e) => { setProjectName(e.target.value); setDirty(true); }}
               style={{ width: 280, fontFamily: 'var(--sans)', fontWeight: 600 }} />
-            <span className="spacer" />
             <button className="btn primary" disabled={saving || !dirty} onClick={save}>
               {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
             </button>
             <button className="btn danger" onClick={del}>Delete</button>
           </>
-        ) : <span className="muted">Select or create a project</span>}
+        )}
       </div>
 
       <div className="sidebar">
@@ -160,7 +171,7 @@ export default function App() {
           <input ref={fileRef} type="file" accept=".xml,.json" style={{ display: 'none' }} onChange={onImport} />
         </div>
         {projects.map((p) => (
-          <div key={p.id} className={`proj ${p.id === activeId ? 'active' : ''}`} onClick={() => openProject(p.id)}>
+          <div key={p.id} className={`proj ${p.id === activeId && view === 'editor' ? 'active' : ''}`} onClick={() => openProject(p.id)}>
             <div className="pname">{p.name}</div>
             <div className="pmeta">{p.documentId} · rev {p.revision} · {p.interfaceCount} if / {p.signalCount} sig</div>
           </div>
@@ -169,7 +180,9 @@ export default function App() {
       </div>
 
       <div className="main">
-        {!definition ? (
+        {view === 'reqgen' ? (
+          <ReqgenPanel projects={projects} onToast={showToast} />
+        ) : !definition ? (
           <>
             <div className="empty" style={{ height: 'auto', paddingTop: 40, paddingBottom: 30 }}>
               <div style={{ fontSize: 40 }}>⌖</div>
@@ -215,7 +228,9 @@ export default function App() {
       </div>
 
       <div className="statusbar">
-        {definition ? (
+        {view === 'reqgen' ? (
+          <span className="muted">REQGEN · config editor · the file is the single source of truth</span>
+        ) : definition ? (
           <>
             <span>{definition.metadata.documentId}</span>
             <span className="sep">│</span>

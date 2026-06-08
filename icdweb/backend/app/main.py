@@ -1,6 +1,7 @@
 """FastAPI application for the ICD editor.
 
-Thin HTTP layer over service.py. Endpoints:
+Thin HTTP layer over service.py (ICD projects) and reqgen_service.py (the
+requirement-generation config editor). Endpoints:
   GET    /api/health
   GET    /api/meta/options            enum options for the form (bus, dal, types)
   GET    /api/projects                list projects
@@ -13,6 +14,17 @@ Thin HTTP layer over service.py. Endpoints:
   GET    /api/projects/{id}/artifacts/{filename}   download an artifact
   POST   /api/import                  parse an uploaded XML/JSON into a definition
   POST   /api/diff                    diff two posted definitions
+  POST   /api/diff-files              diff two uploaded files (JSON)
+  POST   /api/diff-report             diff two uploaded files (PDF download)
+  GET    /api/projects/{id}/export.xml
+
+  --- reqgen config editor ---
+  GET    /api/reqgen/meta             aspect-registry descriptor for the editor
+  GET    /api/reqgen/config           config of record (+ hash)
+  PUT    /api/reqgen/config           validate + save a config draft (400 on
+                                      bright-line / schema violation)
+  POST   /api/reqgen/preview          generate requirements from a draft config
+  POST   /api/reqgen/reconcile        draft-vs-saved requirement diff
 
 The static React build is mounted at / when present (single-container deploy).
 """
@@ -31,6 +43,7 @@ from icdgen.provenance import TOOL_VERSION
 from icdgen.serializer import to_xml
 
 from . import service
+from . import reqgen_service
 from .schemas import IcdDTO, model_to_dto
 
 app = FastAPI(title="icdgen editor", version=TOOL_VERSION)
@@ -223,7 +236,6 @@ async def diff_report(old: UploadFile, new: UploadFile):
     from fastapi.responses import Response
     from icdgen.diff import diff as _diff
     from icdgen.gen_diff_pdf import build_diff_pdf
-    from .schemas import dto_to_model
 
     async def _parse(f: UploadFile):
         raw = await f.read()
@@ -278,6 +290,62 @@ def export_xml(project_id: str):
     from .schemas import dto_to_model
     xml = to_xml(dto_to_model(dto))
     return Response(xml, media_type="application/xml")
+
+
+# ==========================================================================
+# reqgen config editor
+#
+# The config FILE is the single record of truth and reqgen.config_io.save_config
+# is its only writer. These routes are a thin pass-through to reqgen_service,
+# which never holds its own config state. PUT validates (bright line included)
+# and 400s on a bad draft; preview/reconcile generate in-memory and never write.
+# ==========================================================================
+@app.get("/api/reqgen/meta")
+def reqgen_meta():
+    return reqgen_service.meta()
+
+
+@app.get("/api/reqgen/config")
+def reqgen_get_config():
+    return reqgen_service.read_config()
+
+
+@app.put("/api/reqgen/config")
+def reqgen_put_config(payload: dict = Body(...)):
+    cfg = (payload or {}).get("config")
+    if cfg is None:
+        raise HTTPException(400, "missing 'config'")
+    try:
+        return reqgen_service.save(cfg)
+    except reqgen_service.ConfigError as exc:
+        # Bright-line / schema violation -> 400 with the specific message.
+        raise HTTPException(400, str(exc))
+
+
+@app.post("/api/reqgen/preview")
+def reqgen_preview(payload: dict = Body(...)):
+    try:
+        result = reqgen_service.preview(payload or {})
+    except FileNotFoundError:
+        raise HTTPException(404, "ICD project not found")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except ValidationError as exc:
+        raise HTTPException(400, f"ICD did not validate: {exc}")
+    return result
+
+
+@app.post("/api/reqgen/reconcile")
+def reqgen_reconcile(payload: dict = Body(...)):
+    try:
+        result = reqgen_service.reconcile(payload or {})
+    except FileNotFoundError:
+        raise HTTPException(404, "ICD project not found")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except ValidationError as exc:
+        raise HTTPException(400, f"ICD did not validate: {exc}")
+    return result
 
 
 # ---- Serve the built frontend if present (production single-container) ----

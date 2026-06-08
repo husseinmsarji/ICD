@@ -3,6 +3,11 @@
 Covers schema validation (XML+JSON, line-referenced errors), the relaxed-rule
 behavior (v1.5.0), the warnings channel, byte-determinism, provenance stamping,
 registry/schema sync, and diff detection.
+
+Examples: the suite runs against the three-revision eVTOL ICD
+(icd_evtol_revA/B/C.xml). revA is the single-baseline stand-in formerly played
+by icd_example.xml; the revB->revC pair is the diff fixture formerly played by
+icd_demo.xml -> icd_demo_revD.xml.
 """
 import os
 import subprocess
@@ -18,7 +23,11 @@ from icdgen.diff import diff  # noqa: E402
 from icdgen.loader import ValidationError, load  # noqa: E402
 from icdgen.provenance import Provenance  # noqa: E402
 
-EX_XML = os.path.join(ROOT, "examples", "icd_example.xml")
+# Baseline ICD used by most tests. revA: 3 interfaces / 3 packets / 9 signals,
+# Rev A (no pr_tickets expected). IF-NAV-STATE/POSITION carries latitude,
+# longitude, altitude_msl, so the if_nav_state_position_t struct and a
+# <units>deg</units> element are both present.
+EX_XML = os.path.join(ROOT, "examples", "icd_evtol_revA.xml")
 
 
 def _make_xml(tmp_path, body):
@@ -30,7 +39,7 @@ def _make_xml(tmp_path, body):
 def test_valid_xml_loads():
     model, h, _w = load(EX_XML)
     assert model.schema_version == "1.0"
-    assert len(model.interfaces) == 1
+    assert len(model.interfaces) == 3
     assert len(h) == 64
 
 
@@ -347,15 +356,16 @@ def test_revision_summary_missing_source_is_graceful(tmp_path):
 def test_diff_pdf_report_builds_and_is_deterministic(tmp_path):
     from icdgen.gen_diff_pdf import build_diff_pdf
     import hashlib
-    demo = os.path.join(ROOT, "examples", "icd_demo.xml")
-    revd = os.path.join(ROOT, "examples", "icd_demo_revD.xml")
-    o, oh, _ = load(demo)
-    n, nh, _ = load(revd)
+    old = os.path.join(ROOT, "examples", "icd_evtol_revB.xml")
+    new = os.path.join(ROOT, "examples", "icd_evtol_revC.xml")
+    o, oh, _ = load(old)
+    n, nh, _ = load(new)
     res = diff(o, n)
+    assert res.has_changes               # revB -> revC is a real, non-empty diff
     p1 = str(tmp_path / "d1.pdf")
     p2 = str(tmp_path / "d2.pdf")
-    build_diff_pdf(res, oh, nh, p1, "Rev C", "Rev D")
-    build_diff_pdf(res, oh, nh, p2, "Rev C", "Rev D")
+    build_diff_pdf(res, oh, nh, p1, "Rev B", "Rev C")
+    build_diff_pdf(res, oh, nh, p2, "Rev B", "Rev C")
     b1 = open(p1, "rb").read()
     assert b1[:5] == b"%PDF-"
     assert b1 == open(p2, "rb").read()  # deterministic
