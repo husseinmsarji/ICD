@@ -32,9 +32,7 @@ icdgen = "icdgen.cli:main"
 packages = ["icdgen"]
 
 [tool.setuptools.package-data]
-icdgen = ["templates/*.j2", "schemas/*.xsd", "schemas/*.template"]
-
-# Note: the XSD lives in schemas/ at the repo root for source runs and is
-# bundled explicitly by icdgen.spec for the PyInstaller build. For a pip
-# install, ship it inside the package by also copying it under icdgen/ if you
-# prefer; resources.py resolves both layouts.
+# The XSD template is the single source of truth for the schema and ships
+# inside the package (icdgen/schemas/), so one copy serves source, wheel, and
+# PyInstaller builds. resources.py resolves it next to the package module.
+icdgen = ["templates/*.j2", "schemas/*.template"]

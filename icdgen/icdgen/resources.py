@@ -3,20 +3,15 @@
 Works both from a source checkout and from a PyInstaller onefile bundle, where
 data files are unpacked under sys._MEIPASS. All access to the XSD and Jinja
 templates must go through here so the standalone executable can find them.
+
+The XSD template is package data: it lives at icdgen/schemas/icd-1.0.xsd.template
+(inside the importable package), so a single copy serves source checkouts, pip
+wheels, and PyInstaller bundles alike — it cannot drift.
 """
 from __future__ import annotations
 
 import os
 import sys
-
-
-def _base_dir() -> str:
-    # PyInstaller sets _MEIPASS to the temp extraction dir.
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        return meipass
-    # Source layout: this file lives in icdgen/, project root is its parent.
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _first_existing(*candidates: str) -> str:
@@ -33,13 +28,19 @@ def xsd_template_path() -> str:
     The signal and interface-enum portions are injected from the field registry
     at load time (see schema_gen.assemble_xsd), so the schema can never drift
     from the registry.
+
+    The template is package data shipped at icdgen/schemas/icd-1.0.xsd.template.
+    One physical copy serves every layout: a source checkout and a pip-installed
+    wheel both resolve it next to this module; a PyInstaller bundle unpacks it
+    under sys._MEIPASS/icdgen/schemas/ (see icdgen.spec datas).
     """
-    base = _base_dir()
     here = os.path.dirname(os.path.abspath(__file__))
-    return _first_existing(
-        os.path.join(base, "schemas", "icd-1.0.xsd.template"),
-        os.path.join(here, "schemas", "icd-1.0.xsd.template"),
-    )
+    candidates = [os.path.join(here, "schemas", "icd-1.0.xsd.template")]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(
+            os.path.join(meipass, "icdgen", "schemas", "icd-1.0.xsd.template"))
+    return _first_existing(*candidates)
 
 
 def compiled_xsd() -> str:
@@ -50,9 +51,14 @@ def compiled_xsd() -> str:
 
 
 def template_dir() -> str:
-    base = _base_dir()
+    """Directory holding the Jinja2 templates (header.h.j2, simulink_bus.m.j2).
+
+    Resolves next to this module for source/wheel installs, and under the
+    PyInstaller datas layout (sys._MEIPASS/icdgen/templates) when frozen.
+    """
     here = os.path.dirname(os.path.abspath(__file__))
-    return _first_existing(
-        os.path.join(base, "icdgen", "templates"),  # PyInstaller datas layout
-        os.path.join(here, "templates"),             # source / installed package
-    )
+    candidates = [os.path.join(here, "templates")]
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "icdgen", "templates"))
+    return _first_existing(*candidates)
