@@ -21,8 +21,8 @@ from icdgen.loader import load
 # Resolve the demo ICD relative to the installed icdgen examples.
 import icdgen
 _ICDGEN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(icdgen.__file__)))
-DEMO = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revC.xml")
-REVB = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revB.xml")
+DEMO = os.path.join(_ICDGEN_DIR, "examples", "icd_demo_revC.xml")
+REVB = os.path.join(_ICDGEN_DIR, "examples", "icd_demo_revB.xml")
 
 
 def _prov():
@@ -68,16 +68,11 @@ def test_invalid_aspect_rejected(tmp_path):
 def test_generate_default_counts():
     model, _h, _w = load(DEMO)
     reqs = generate_requirements(model, default_config())
-    # Derive expected counts from the model so the test tracks the example:
-    # 2 default L3 aspects (EXISTS, DAL) per packet; 2 default L4 (TYPE, RANGE)
-    # per signal.
-    n_pkt = sum(len(p.signals) and 1 or 1 for i in model.interfaces for p in i.packets)
-    n_pkt = sum(1 for i in model.interfaces for p in i.packets)
-    n_sig = sum(1 for _ in model.all_signals())
+    # 4 packets * 2 L3 aspects (EXISTS,DAL) + 10 signals * 2 L4 (TYPE,RANGE)
     n_l3 = sum(1 for r in reqs if r.level == "L3")
     n_l4 = sum(1 for r in reqs if r.level == "L4")
-    assert n_l3 == n_pkt * 2
-    assert n_l4 == n_sig * 2
+    assert n_l3 == 4 * 2
+    assert n_l4 == 10 * 2
 
 
 def test_ids_are_stable_across_runs():
@@ -98,9 +93,8 @@ def test_port_granularity_collapses_l3(tmp_path):
     cfg = default_config()
     cfg.l3_granularity = "port"
     reqs = generate_requirements(model, cfg)
-    # one L3 unit per interface * 2 default L3 aspects (not per packet)
-    n_if = len(model.interfaces)
-    assert sum(1 for r in reqs if r.level == "L3") == n_if * 2
+    # 3 interfaces * 2 L3 aspects (one per interface, not per packet)
+    assert sum(1 for r in reqs if r.level == "L3") == 3 * 2
 
 
 # ---- precedence ----
@@ -134,10 +128,10 @@ def test_reconcile_four_states():
     current = generate_requirements(mc, cfg)
     prior_csv = to_csv(generate_requirements(mb, cfg), _prov())
     rec = reconcile(current, prior_csv)
-    # revC adds a VELOCITY packet (vel_north etc.) and other signals not in B.
+    # revC adds vertical_speed, drops nothing structural from B that C lacks...
     assert rec.has_changes
-    # vel_north exists in C, not B -> added
-    assert any("vel_north" in i for i in rec.added)
+    # vertical_speed exists in C, not B -> added
+    assert any("vertical_speed" in i for i in rec.added)
 
 
 def test_reconcile_identical_is_clean():

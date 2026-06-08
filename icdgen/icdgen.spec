@@ -23,7 +23,7 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[
-        ('icdgen/schemas/icd-1.0.xsd.template', 'icdgen/schemas'),
+        ('schemas/icd-1.0.xsd', 'schemas'),
         ('icdgen/templates/header.h.j2', 'icdgen/templates'),
         ('icdgen/templates/simulink_bus.m.j2', 'icdgen/templates'),
     ] + _third_party_datas,

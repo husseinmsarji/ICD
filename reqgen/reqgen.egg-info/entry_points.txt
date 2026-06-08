@@ -1,0 +1,2 @@
+[console_scripts]
+reqgen = reqgen.cli:main

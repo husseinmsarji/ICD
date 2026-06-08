@@ -1,0 +1,12 @@
+# Build artifacts and local cruft — keep the build context small.
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+icdgen/build
+icdgen/dist
+icdgen/*.egg-info
+**/.venv
+**/.git
+**/data

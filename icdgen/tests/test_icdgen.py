@@ -18,7 +18,7 @@ from icdgen.diff import diff  # noqa: E402
 from icdgen.loader import ValidationError, load  # noqa: E402
 from icdgen.provenance import Provenance  # noqa: E402
 
-EX_XML = os.path.join(ROOT, "examples", "icd_evtol_revA.xml")
+EX_XML = os.path.join(ROOT, "examples", "icd_example.xml")
 
 
 def _make_xml(tmp_path, body):
@@ -30,7 +30,7 @@ def _make_xml(tmp_path, body):
 def test_valid_xml_loads():
     model, h, _w = load(EX_XML)
     assert model.schema_version == "1.0"
-    assert len(model.interfaces) == 3
+    assert len(model.interfaces) == 1
     assert len(h) == 64
 
 
@@ -347,8 +347,8 @@ def test_revision_summary_missing_source_is_graceful(tmp_path):
 def test_diff_pdf_report_builds_and_is_deterministic(tmp_path):
     from icdgen.gen_diff_pdf import build_diff_pdf
     import hashlib
-    demo = os.path.join(ROOT, "examples", "icd_evtol_revB.xml")
-    revd = os.path.join(ROOT, "examples", "icd_evtol_revC.xml")
+    demo = os.path.join(ROOT, "examples", "icd_demo.xml")
+    revd = os.path.join(ROOT, "examples", "icd_demo_revD.xml")
     o, oh, _ = load(demo)
     n, nh, _ = load(revd)
     res = diff(o, n)
@@ -447,6 +447,23 @@ def test_serializer_escapes_quotes_in_attributes(tmp_path):
     p.write_text(xml, encoding="utf-8")
     model2, _h, _w = load(str(p))
     assert model2.interfaces[0].packets[0].name == 'bad"quote'
+
+
+# ---- configuration-management guards ----
+def test_schema_template_copies_in_sync():
+    """The XSD template is shipped in two locations (repo-root schemas/ for
+    source/PyInstaller, and inside the package for wheel installs). They are
+    kept in sync by hand, so guard that they are byte-identical: a drift here
+    would mean a wheel-installed tool validates against a different schema than
+    a source checkout, which is a qualification hazard."""
+    root_copy = os.path.join(ROOT, "schemas", "icd-1.0.xsd.template")
+    pkg_copy = os.path.join(ROOT, "icdgen", "schemas", "icd-1.0.xsd.template")
+    if not (os.path.isfile(root_copy) and os.path.isfile(pkg_copy)):
+        import pytest as _pt
+        _pt.skip("only one template copy present in this layout")
+    with open(root_copy, "rb") as a, open(pkg_copy, "rb") as b:
+        assert a.read() == b.read(), "XSD template copies have drifted"
+
 
 def test_package_version_matches_tool_version():
     """pyproject version and the provenance TOOL_VERSION are independent by

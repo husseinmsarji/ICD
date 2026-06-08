@@ -1,4 +1,4 @@
-# AI_README — icdgen / icdweb / reqgen architecture map
+# AI_README — icdgen architecture map
 
 > **Purpose of this file.** This is the single document to paste back to Claude
 > (or hand to any engineer) when requesting changes. It describes every file,
@@ -15,13 +15,15 @@
 
 ## 1. Version & history
 
-- **Project version (`icdgen/pyproject.toml`):** 1.6.0
+- **Project version:** 1.6.0
 - **`icdgen` tool/provenance version:** 1.0.0 — the string stamped into
   artifacts (`provenance.TOOL_VERSION`). Bump it deliberately; it is independent
   of the project version and changing it changes artifact bytes (re-baseline).
-- **`reqgen` tool version:** 0.1.0 (`reqgen.provenance.TOOL_VERSION`).
 - **Schema version:** 1.0 — XML namespace `urn:icdgen:icd:1.0`, `schemaVersion`
   attribute pinned to `1.x`.
+- **Note:** `icdgen/pyproject.toml` still reads `version = "1.3.0"`. Known lag;
+  bump at release. String only; **no effect on generated output**
+  (provenance uses `TOOL_VERSION`).
 
 ### History
 - **1.0.0** — initial CLI tool + web app.
@@ -39,40 +41,30 @@
   **BREAKING API: `loader.load()` returns a 3-tuple** `(model, hash, warnings)`.
   Details in section 9.
 - **1.6.0 (current)** — Change control + diff reporting:
-  (a) per-signal `pr_ticket` field (PR/change ticket that last touched a signal;
-  non-fatal warning when missing on a post-Rev-A ICD);
+  (a) per-signal `pr_ticket` field (PR/ticket that last touched a signal; non-
+  fatal warning when missing on a post-Rev-A ICD);
   (b) `<priorRevisions>` linkage + `rev_summary.py`: the ICD document's revision
   table gains a **"Change Summary Report"** column, auto-computed by diffing the
   current ICD against each linked prior-revision source (Flow A — CLI via path
   links, web via per-revision just-in-time file upload);
   (c) a standalone **PDF diff report** for comparing two arbitrary files
   (`gen_diff_pdf.py`, CLI `diff -o`, web `POST /api/diff-report`) (Flow B).
-- **Post-1.6.0 maintenance (no version bump):**
-  * XSD template **single-sourced** — one copy at
-    `icdgen/icdgen/schemas/icd-1.0.xsd.template`, shipped as package data;
-    `resources.py` resolves only that path (+ MEIPASS for frozen builds). The
-    old repo-root duplicate and the `test_schema_template_copies_in_sync` guard
-    were removed (there is nothing left to drift). See section 11.
-  * Demo examples replaced with three revisions of one ICD (`ICD-EVTOL-AVS-200`).
-  * `reqgen` added as a separate sibling tool (section 15).
+  Details in section 9.5.
 
 ---
 
 ## 2. What the system is
 
-Three pieces sharing one core library:
+Two deployable pieces sharing one core library:
 
 1. **`icdgen/`** — the core Python library + CLI. Takes a single
    schema-validated XML/JSON ICD definition and deterministically generates: a
    Word ICD (`.docx`), a PDF ICD, a C header (MISRA C:2012-oriented), a Simulink
    bus script (`.m`), a traceability matrix (`.csv` + `.xlsx`), a version diff
-   report (text/CSV/PDF). pip-installable and PyInstaller-packageable.
+   report (text/CSV/PDF). Also pip-installable and PyInstaller-packageable.
 2. **`icdweb/`** — a web app over the core: FastAPI backend + React form editor,
    containerized with Docker. The editor authors interfaces/packets/signals in a
    form; validation, generation, and diff call straight into the core library.
-3. **`reqgen/`** — a separate, independently-qualifiable tool that imports
-   icdgen as a library, reads its own version-controlled config, and emits an
-   RM-tool requirements export + reconciliation report. Never mutates the ICD.
 
 **Core value proposition:** one input file is the single source of truth; every
 artifact is generated from it. **Identical input => byte-identical output**
@@ -92,14 +84,18 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 ├── icdgen/                       ← CORE library + CLI (pip-installable)
 │   ├── pyproject.toml            packaging; EXACT-pinned runtime deps
 │   ├── requirements.txt
-│   ├── icdgen.spec               PyInstaller build spec (bundles the one template)
+│   ├── icdgen.spec               PyInstaller build spec
 │   ├── run.py / pyi_rth_docx.py  PyInstaller entry + runtime hook
 │   ├── README.md
+│   ├── schemas/icd-1.0.xsd.template   XSD TEMPLATE (markers; PriorRevisions/
+│   │                                  Packets/Packet structural)
 │   ├── examples/
-│   │   ├── icd_evtol_revA.xml          initial release (3 if / 3 pkt / 9 sig)
-│   │   ├── icd_evtol_revB.xml          adds AHRS bus; links revA
-│   │   └── icd_evtol_revC.xml      ★   current (6 if / 9 pkt / 31 sig); links revB
-│   ├── tests/test_icdgen.py            36 tests
+│   │   ├── icd_example.xml / .json    small
+│   │   ├── icd_demo.xml      ★         full demo
+│   │   ├── icd_demo_revB.xml           prior-revision source for the demo
+│   │   ├── icd_demo_revC.xml           links priorRevisions B->revB; one prTicket
+│   │   └── icd_demo_revD.xml           diff target
+│   ├── tests/test_icdgen.py            33 tests
 │   └── icdgen/                   ← the importable package
 │       ├── __init__.py / __main__.py
 │       ├── cli.py                argparse CLI: validate | generate | diff
@@ -113,60 +109,43 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 │       │                         parses <priorRevisions>
 │       ├── serializer.py         IcdModel -> canonical XML (emits priorRevisions)
 │       ├── provenance.py         tool/version/hash stamp (timestamp-free)
-│       ├── resources.py          single-sourced schema template + Jinja dir
+│       ├── resources.py          schema template + Jinja dir resolution
 │       ├── gen_code.py           C header + Simulink .m (Jinja2); MISRA helpers
-│       ├── gen_docx.py           DOCX ICD; landscape; "Change Summary Report" col
+│       ├── gen_docx.py           DOCX ICD; landscape; revision table has the
+│       │                         "Change Summary Report" column
 │       ├── gen_pdf.py            PDF ICD; same revision-table column
 │       ├── gen_trace.py          traceability CSV + XLSX (incl. PR Ticket col)
-│       ├── gen_diff_pdf.py       standalone PDF change report (Flow B)
+│       ├── gen_diff_pdf.py  ★NEW standalone PDF change report (Flow B)
 │       ├── rev_summary.py   ★    per-revision change summaries (Flow A)
 │       ├── diff.py               version diff engine + text/CSV reports
 │       ├── ooxml_determinism.py  ZIP-normalizes .docx/.xlsx
-│       ├── schemas/icd-1.0.xsd.template  ★ THE one XSD template (package data)
 │       └── templates/header.h.j2, simulink_bus.m.j2
 │
-├── icdweb/                       ← WEB app (FastAPI + React)
-│   ├── Dockerfile, docker-compose.yml, README.md
-│   ├── backend/app/
-│   │   ├── main.py               routes incl. /api/diff, /api/diff-files,
-│   │   │                         /api/diff-report (PDF download)
-│   │   ├── schemas.py            DTOs incl. prTicket + PriorRevisionDTO
-│   │   └── service.py            project storage; validate/generate/diff
-│   │   └── tests/test_api.py     8 tests
-│   └── frontend/src/
-│       ├── App.jsx               shell; renders DiffPanel (open + empty states)
-│       ├── MetadataEditor.jsx, InterfaceEditor.jsx, PacketEditor.jsx,
-│       ├── SignalTable.jsx, GeneratePanel.jsx
-│       ├── DiffPanel.jsx         two-file compare -> downloads PDF report
-│       ├── api.js                one fn per endpoint (incl. diffReportPdf)
-│       └── styles.css            avionics instrument-panel design system
-│
-└── reqgen/                       ← REQUIREMENT generator (separate tool)
-    ├── pyproject.toml            packages = ["reqgen"]; depends on icdgen
-    ├── README.md
-    ├── config/reqgen.json        the config of record (committed)
-    ├── tests/test_reqgen.py      16 tests
-    └── reqgen/                   ← the importable package
-        ├── __init__.py / __main__.py
-        ├── cli.py                init | generate | reconcile
-        ├── paths.py              bakes the config location (reqgen/config/reqgen.json)
-        ├── config_schema.py ★    aspect registry + ReqConfig (single source)
-        ├── config_io.py          read/write/hash the config file
-        ├── generate.py           ICD model + config -> Requirement objects
-        ├── export.py             pluggable exporters (CSV today)
-        ├── reconcile.py          four-state diff vs a prior export
-        └── provenance.py         dual-hash (ICD + config) stamp
+└── icdweb/                       ← WEB app (FastAPI + React)
+    ├── Dockerfile, docker-compose.yml, README.md
+    ├── backend/app/
+    │   ├── main.py               routes incl. /api/diff, /api/diff-files,
+    │   │                         /api/diff-report (PDF download)
+    │   ├── schemas.py            DTOs incl. prTicket + PriorRevisionDTO
+    │   └── service.py            project storage; validate/generate/diff
+    │   └── tests/test_api.py     8 tests
+    └── frontend/src/
+        ├── App.jsx               shell; renders DiffPanel (open + empty states)
+        ├── MetadataEditor.jsx, InterfaceEditor.jsx ★, PacketEditor.jsx,
+        ├── SignalTable.jsx ★, GeneratePanel.jsx
+        ├── DiffPanel.jsx    ★NEW two-file compare -> downloads PDF report
+        ├── api.js                one fn per endpoint (incl. diffReportPdf)
+        └── styles.css            avionics instrument-panel design system
 ```
 
-> **Schema note.** The full XSD is assembled in memory at load time from the one
-> template + both registries (`resources.compiled_xsd()`); it cannot drift from
-> the registries, and there is no second template copy to drift from either.
+> **Schema note.** The full XSD is assembled in memory at load time from the
+> template + both registries (`resources.compiled_xsd()`); it cannot drift.
 > **Filename casing matters:** `App.jsx` imports `./DiffPanel.jsx` (capital P);
-> the file MUST be committed as `DiffPanel.jsx` or the Linux Docker build fails
-> to resolve the import even though it works on case-insensitive Windows/macOS
-> filesystems.
+> the file must be committed with that exact casing or the Linux Docker build
+> fails to resolve the import even though it works on case-insensitive Windows/
+> macOS filesystems.
 
-★ = the files that make "add a field in one place" work.
+★ = the files that make "add a field in one place" work. ★NEW = added in 1.6.0.
 
 ---
 
@@ -262,25 +241,25 @@ DTOs are intentionally loose; only `Dal` stays a `Literal`. `load()` is a 3-tupl
 ### Flow A — per-revision Change Summary Report (inside the ICD document)
 - `<priorRevisions>` block maps `revision -> source` file:
   ```xml
-  <priorRevisions><priorRevision revision="B" source="icd_evtol_revB.xml"/></priorRevisions>
+  <priorRevisions><priorRevision revision="B" source="icd_demo_revB.xml"/></priorRevisions>
   ```
 - `rev_summary.compute_revision_summaries(model, base_dir, mode="pr")` runs the
   diff engine against each linked prior source and returns a per-revision
   summary. Rev A -> "Initial release"; a revision with no linked source -> short
   note; never raises. **`mode` selects the cell wording:**
-    * `"pr"` (default) — group every change by the PR/change ticket that made
-      it, listing signal names: e.g.
-      `AVS-1101: +vel_north; +vel_east | AVS-1110: ~torque_limit (range_max) | (no ticket): +interface IF-ENV; -bms_fault`.
+    * `"pr"` (default) — group every change by the PR ticket that made it,
+      listing signal names: e.g.
+      `PR-1042: +vertical_speed | PR-2000: ~altitude_msl (range_max) | (no ticket): -state_of_charge`.
       Attribution: added/modified use the NEW signal's `pr_ticket`; removed uses
       the OLD signal's `pr_ticket`; untagged -> "(no ticket)". The `pr_ticket`
       field is suppressed from a modified signal's listed fields, and a
-      modification whose ONLY change was the ticket is dropped (so persisting a
-      carried-over ticket on an unchanged signal produces no spurious diff).
+      modification whose ONLY change was the ticket is dropped.
     * `"detailed"` — itemized per-signal lines, no ticket grouping.
     * `"counts"` — compact aggregate counts.
 - `gen_docx`/`gen_pdf` render this as the **"Change Summary Report"** column in
-  the revision-history table. Both builders take `base_dir` (the dir prior
-  `source` paths resolve against); the CLI passes the input file's directory.
+  the revision-history table (renamed from "Changes in This Revision" in 1.6.0).
+  Both builders take `base_dir` (the dir prior `source` paths resolve against);
+  the CLI passes the input file's directory.
 - **Web app (just-in-time upload).** The revision-history table in
   `MetadataEditor.jsx` has a per-row "Baseline file (state at this revision)"
   upload. The frontend reads the file as text and holds a transient
@@ -288,33 +267,36 @@ DTOs are intentionally loose; only `Dal` stays a `Literal`. `load()` is a 3-tupl
   `GeneratePanel` passes it as `priorFiles` on the generate call. The backend
   `service.generate(..., prior_files=...)` writes each into the output dir as a
   hidden temp file, attaches a synthetic `PriorRevision`, generates with
-  `base_dir=out`, then deletes the temp files.
+  `base_dir=out`, then deletes the temp files. Semantics: the file uploaded on
+  revision X's row is the ICD as it was at X, so the diff X->(next revision)
+  populates the NEXT row's summary (mirrors the `priorRevisions` letter
+  convention, where `revision="B"` fills the C row).
 - To change wording/grouping: edit `_pr_grouped_lines` (default), or
   `_detail_lines` / `_counts_line`, in `rev_summary.py`; pick the mode via the
-  `mode=` arg.
+  `mode=` arg. (Generators call it with the default "pr" mode.)
 
 ### Per-signal `pr_ticket`
 - New last signal field (`<prTicket>` / `prTicket`, label "PR Ticket"); freeform;
   appended so all derived outputs (incl. the traceability matrix "PR Ticket"
   column) pick it up. Optional. Non-fatal warning when missing on a post-Rev-A
-  ICD (gate is `revision not in {"", "A"}`, case-insensitive). The example ICDs
-  use `AVS-####` ticket values; the field/label is still "PR Ticket" in the
-  toolchain (renaming it across registry/schema/traceability/summary is a
-  separate, deliberate change).
+  ICD (gate is `revision not in {"", "A"}`, case-insensitive). To make it fatal,
+  change the `warnings.append(...)` in `loader._semantic_checks` to `raise`.
 
 ### Flow B — standalone two-file diff PDF report
 - `gen_diff_pdf.build_diff_pdf(res, old_hash, new_hash, path, old_label, new_label)`
   renders a `DiffResult` into a deterministic PDF: header with both input
   SHA-256s + a counts summary, then Interface / Added / Removed / Modified
   sections (modified shows field old->new).
-- **CLI:** `icdgen diff old new -o DIR` writes `*_diff.txt`, `*_diff.csv`, AND
-  `*_diff.pdf`.
+- **CLI:** `icdgen diff old new -o DIR` now writes `*_diff.txt`, `*_diff.csv`,
+  AND `*_diff.pdf`.
 - **Web:** `POST /api/diff-report` (two file uploads) streams the PDF as a
   download; a parse failure on either side returns HTTP 400 naming the side.
-  `DiffPanel.jsx` is a download-only two-file form, reachable both with a project
+  `api.js#diffReportPdf` triggers the browser download. `DiffPanel.jsx` is a
+  download-only two-file form (no on-screen diff), reachable both with a project
   open and from the empty state.
-- The JSON endpoints `/api/diff` and `/api/diff-files` remain for programmatic
-  callers; the UI no longer uses `/api/diff-files`.
+- The older JSON endpoints `/api/diff` (two definitions) and `/api/diff-files`
+  (two uploads -> JSON) remain for programmatic callers; the UI no longer uses
+  `/api/diff-files`.
 
 ---
 
@@ -323,28 +305,21 @@ DTOs are intentionally loose; only `Dal` stays a `Literal`. `load()` is a 3-tupl
 `main.py` routes: health; `/api/meta/options`; projects CRUD; `/validate`;
 `/generate` (accepts optional `priorFiles: {rev: text}` for Flow A); artifact
 download; `export.xml`; `/import`; `/diff` (JSON); `/diff-files` (JSON);
-**`/diff-report` (PDF download)**. `schemas.py` DTOs incl. `prTicket` and
-`PriorRevisionDTO`/`IcdDTO.priorRevisions`. `service.py` is the only file
-touching storage. Frontend builds all inputs from `/api/meta/options`.
+**`/diff-report` (PDF download)**. `schemas.py` DTOs incl.
+`prTicket` and `PriorRevisionDTO`/`IcdDTO.priorRevisions`. `service.py` is the
+only file touching storage. Frontend builds all inputs from `/api/meta/options`.
 
 ---
 
-## 11. Determinism contract + schema single-sourcing (must never regress)
+## 11. Determinism contract (must never regress)
 
 Identical input => byte-identical artifacts. No timestamps in artifacts
 (`run.log` is the only wall-clock place). PDF: `rl_config.invariant=1` (covers
 the ICD PDF AND the diff PDF). OOXML: pinned epoch + ZIP normalization. Registry
-order fixes column order. Guard + determinism tests in `tests/test_icdgen.py`.
-Re-verify the byte baseline after any core change.
-
-**Schema single-sourcing.** The XSD template exists in exactly ONE place:
-`icdgen/icdgen/schemas/icd-1.0.xsd.template`, shipped as package data
-(`pyproject.toml [tool.setuptools.package-data]`). `resources.xsd_template_path()`
-resolves only that path, plus the equivalent MEIPASS path for a PyInstaller
-bundle. There is no repo-root copy. This permanently removes the prior
-two-copy drift hazard (the symptom was `priorRevisions ... not expected` when a
-stale repo-root copy shadowed the package copy). If you ever reintroduce a second
-copy, you reintroduce the bug.
+order fixes column order. Guard tests + determinism tests in
+`tests/test_icdgen.py`. The diff PDF and the per-revision summary are
+deterministic because the diff engine and prior-file load are. Re-verify the
+byte baseline after any core change.
 
 ---
 
@@ -353,7 +328,8 @@ copy, you reintroduce the bug.
 - **New SIGNAL field:** one `FieldSpec` in `fields.py` (append) + one attr in
   `model.py`. Flows to schema, codec, UI, traceability, DOCX/PDF tables. The
   traceability matrix uses an explicit column list in `gen_trace.py`, so add the
-  column there too. C-header macros are human-curated in `header.h.j2`.
+  column there too (the one generator that isn't fully registry-driven). C-header
+  macros are human-curated in `header.h.j2`.
 - **New DATA TYPE:** one `DataTypeSpec` in `fields.py` (+ `_UNSIGNED_TYPES`/
   `_LONGLONG_TYPES` in `gen_code.py` if needed).
 - **New ARTIFACT format:** generator in `icdgen/` + one entry in
@@ -361,37 +337,37 @@ copy, you reintroduce the bug.
   `cli.ALL_FORMATS` + a branch in `cmd_generate`.
 - **New INTERFACE field:** one `FieldSpec` + one `Interface` attr (+ DTO type if
   strict). Keep `<packets>` structural.
-- **PACKET fields:** edit `PacketType` (XSD template), `loader._json_schema`,
-  `Packet`, the packet codec fns, `PacketDTO`, `PacketEditor.jsx`.
+- **PACKET fields:** edit `PacketType` (XSD), `loader._json_schema`, `Packet`,
+  the packet codec fns, `PacketDTO`, `PacketEditor.jsx`.
 - **New VALIDATION rule:** schema-expressible -> a `FieldSpec` facet; cross-field
   -> `loader._semantic_checks` (raise for fatal, append `ValidationWarning` for
   non-fatal).
-- **Change the revision summary wording / grouping:** `rev_summary.py`.
+- **Change the revision summary wording / grouping:** `rev_summary.py`
+  (`_pr_grouped_lines` is the default; or `_detail_lines` / `_counts_line` via
+  the `mode=` arg).
 - **Restyle the diff PDF:** `gen_diff_pdf.py` (one file, self-contained).
-- **New schema version:** add `icd-1.1.xsd.template` beside the 1.0 one, register
-  in `loader.SUPPORTED_SCHEMA_VERSIONS`, keep 1.0 working.
+- **New schema version:** add `icd-1.1.xsd.template`, register in
+  `loader.SUPPORTED_SCHEMA_VERSIONS`, keep 1.0 working.
 - **New API endpoint:** `service.py` fn + thin `main.py` route + `api.js` method.
-- **New reqgen aspect:** one `AspectSpec` in `reqgen/config_schema.py` (section 15).
 
 ---
 
 ## 13. Build / run / test quick reference
 
 - **Install (core):** `pip install -e ./icdgen`
-- **Core tests:** `cd icdgen && python -m pytest tests/ -q` -> **36 passed**
+- **Core tests:** `cd icdgen && python -m pytest tests/ -q` -> **33 passed**
 - **Backend tests:**
   `cd icdweb/backend && ICDGEN_DATA_DIR=/tmp/t python -m pytest tests/ -q` ->
   **8 passed**
-- **reqgen tests:**
-  `cd icdgen && PYTHONPATH=../reqgen python -m pytest ../reqgen/tests/ -q` ->
-  **16 passed**
 - **Frontend build:** `cd icdweb/frontend && npm install && npm run build`
 - **Docker (from repo root):**
   `docker compose -f icdweb/docker-compose.yml up --build` -> http://localhost:8000
 - **CLI:**
-  - `python -m icdgen validate examples/icd_evtol_revC.xml`  (shows PR-ticket warnings)
-  - `python -m icdgen generate examples/icd_evtol_revC.xml -o out`
-  - `python -m icdgen diff examples/icd_evtol_revB.xml examples/icd_evtol_revC.xml -o out`
+  - `python -m icdgen validate examples/icd_demo_revC.xml`  (shows PR-ticket warnings)
+  - `python -m icdgen generate examples/icd_demo_revC.xml -o out`  (revision table
+    shows the auto Change Summary Report column)
+  - `python -m icdgen diff examples/icd_demo.xml examples/icd_demo_revD.xml -o out`
+    (writes `_diff.txt`, `_diff.csv`, `_diff.pdf`; exit 2 when differences exist)
 - **Determinism check:** generate twice, compare SHA-256 of all artifacts (skip
   `run.log`).
 
@@ -403,6 +379,7 @@ copy, you reintroduce the bug.
 
 ## 14. Known boundaries / not yet built (intentional)
 
+- **No requirement linkage yet.** Highest-value next feature (one `FieldSpec`).
 - **No auth / multi-tenancy.** Projects are global.
 - **Flat-directory storage** under `ICDGEN_DATA_DIR`; `service.py` is the only
   storage-touching file.
@@ -412,40 +389,8 @@ copy, you reintroduce the bug.
 - **Permissive signal-name pattern;** C-identifier enforcement is warning-only.
 - **Flow A works in BOTH paths.** CLI: link `priorRevisions` (path-based,
   resolved against the ICD's dir). Web: per-revision baseline upload, passed
-  just-in-time as `priorFiles` (content-based, transient — not persisted).
+  just-in-time as `priorFiles` (content-based, transient — not persisted, so
+  re-upload each session). Both converge on `rev_summary` + `base_dir`.
 - **Filename casing:** `DiffPanel.jsx` must keep its capital P (Linux Docker
   build is case-sensitive; Windows/macOS dev filesystems are not).
-- **reqgen exporters:** CSV only so far; ReqIF / tool-specific pending the target
-  RM tool. No UI yet (deferred until the config schema settles).
-
----
-
-## 15. reqgen (requirement generator)
-
-Separate tool, separate qualification scope. Imports icdgen as a library; reads
-its own config; emits a requirements export + reconciliation report. Never writes
-to the ICD.
-
-- **`config_schema.py`** — the schema lives in code: an `ASPECTS` registry of
-  structural requirement types (L3: EXISTS, RATE, DAL; L4: TYPE, RANGE, SCALE,
-  UNITS) and the `ReqConfig` dataclass. THE BRIGHT LINE: templates substitute
-  ONLY ICD field values (structural transcription), never engineering intent.
-- **`config_io.py`** — read/write/hash the config file; `ensure_config` writes a
-  populated default if absent (the file is driven by code, never hand-started);
-  `save_config` is the only writer (CLI today, UI later).
-- **`paths.py`** — bakes the config location: `reqgen/config/reqgen.json`
-  (inside the reqgen project, NOT the repo root). `$REQGEN_CONFIG` overrides.
-- **`generate.py`** — walks the ICD, emits `Requirement` objects with **stable
-  IDs derived from ICD structure** (so regeneration is idempotent and an RM-tool
-  import updates in place). Precedence: per-signal -> per-interface -> global ->
-  aspect default.
-- **`export.py`** — pluggable `EXPORTERS` registry; CSV today.
-- **`reconcile.py`** — four-state diff (added/removed/changed/unchanged) of a
-  fresh generation vs a prior export CSV; the "what to touch in the RM tool"
-  report.
-- **`provenance.py`** — dual-hash anchor: a generated module traces to the
-  reqgen version + the ICD SHA-256 + the config SHA-256.
-- **CLI:** `reqgen init | generate <icd> -o DIR | reconcile <icd> <prior.csv>`.
-- **Layout guard:** `pyproject.toml` declares `packages = ["reqgen"]`; a
-  flattened tree fails to install loudly, and `test_package_is_properly_nested`
-  guards it in CI.
+- **`pyproject.toml` version lag.** Reads `1.3.0`; bump at release.
