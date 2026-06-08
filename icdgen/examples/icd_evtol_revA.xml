@@ -1,32 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  DEMONSTRATION ICD — full capability:
-    * Interface -> Packets -> Signals grouping
-    * Multiple bus types and DAL levels
-    * Signal Type enum incl. the "enum" data type
-    * Data Bits / Xmit Bits / Xmit Bytes, Scale, Offset, Definition
+  eVTOL Integrated Avionics ICD — Revision A (initial release).
+  3 interfaces, 3 packets, 9 signals. Rev A is the baseline, so signals carry
+  no AVS change-control tickets (none are expected at initial release).
   Schema-valid against urn:icdgen:icd:1.0.
 -->
 <icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">
   <metadata>
-    <documentId>ICD-EVTOL-DEMO-100</documentId>
+    <documentId>ICD-EVTOL-AVS-200</documentId>
     <documentTitle>eVTOL Integrated Avionics Interface Control Document</documentTitle>
-    <program>eVTOL-Gen6-Demonstrator</program>
-    <revision>C</revision>
-    <revisionDate>2026-06-01</revisionDate>
+    <program>eVTOL-Gen6</program>
+    <revision>A</revision>
+    <revisionDate>2026-01-15</revisionDate>
     <author>H. Avionics</author>
     <revisionHistory>
       <entry>
         <revision>A</revision><date>2026-01-15</date><author>H. Avionics</author>
-        <description>Initial release.</description>
-      </entry>
-      <entry>
-        <revision>B</revision><date>2026-03-22</date><author>H. Avionics</author>
-        <description>Added battery management bus.</description>
-      </entry>
-      <entry>
-        <revision>C</revision><date>2026-06-01</date><author>H. Avionics</author>
-        <description>Reorganized signals into packets; added bit-width fields and enum types.</description>
+        <description>Initial release: navigation position, rotor command, and battery telemetry buses.</description>
       </entry>
     </revisionHistory>
   </metadata>
@@ -35,7 +25,7 @@
       <name>Navigation State Bus</name>
       <sourceLru>NAV-COMPUTER</sourceLru>
       <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
-      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <owningDocument>ICD-EVTOL-AVS-200</owningDocument>
       <description>Primary navigation solution over AFDX VL-101.</description>
       <packets>
         <packet name="POSITION">
@@ -52,6 +42,7 @@
               <description>WGS-84 geodetic longitude.</description>
               <updateRateHz>50</updateRateHz><units>deg</units>
               <dataBits>64</dataBits><xmitBits>64</xmitBits><xmitBytes>8</xmitBytes>
+              <definition>Positive east.</definition>
               <rangeMin>-180.0</rangeMin><rangeMax>180.0</rangeMax>
             </signal>
             <signal name="altitude_msl" signalType="float32">
@@ -62,24 +53,6 @@
             </signal>
           </signals>
         </packet>
-        <packet name="STATUS">
-          <description>Navigation health and mode.</description>
-          <signals>
-            <signal name="nav_valid" signalType="bool">
-              <description>Solution validity flag.</description>
-              <updateRateHz>50</updateRateHz><units></units>
-              <dataBits>1</dataBits><xmitBits>1</xmitBits>
-              <rangeMin>0</rangeMin><rangeMax>1</rangeMax>
-            </signal>
-            <signal name="nav_mode" signalType="enum">
-              <description>Active navigation mode.</description>
-              <updateRateHz>10</updateRateHz><units></units>
-              <dataBits>3</dataBits><xmitBits>3</xmitBits>
-              <definition>0=GPS,1=INS,2=blended,3=degraded.</definition>
-              <rangeMin>0</rangeMin><rangeMax>3</rangeMax>
-            </signal>
-          </signals>
-        </packet>
       </packets>
     </interface>
 
@@ -87,7 +60,8 @@
       <name>Motor Command Bus</name>
       <sourceLru>FLIGHT-CONTROL-COMPUTER</sourceLru>
       <destinationLru>MOTOR-CONTROLLER-1</destinationLru>
-      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <owningDocument>ICD-EVTOL-AVS-200</owningDocument>
+      <description>Per-rotor commands from the FCC.</description>
       <packets>
         <packet name="ROTOR_CMD">
           <description>Per-rotor commands at 100 Hz.</description>
@@ -116,10 +90,11 @@
       <name>Battery Management Bus</name>
       <sourceLru>BATTERY-MGMT-SYSTEM</sourceLru>
       <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
-      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <owningDocument>ICD-EVTOL-AVS-200</owningDocument>
+      <description>Pack-level battery telemetry, CAN 2.0B.</description>
       <packets>
         <packet name="PACK_TELEMETRY">
-          <description>Pack-level telemetry, CAN 2.0B.</description>
+          <description>Pack-level telemetry.</description>
           <signals>
             <signal name="pack_voltage" signalType="uint16">
               <description>Pack terminal voltage.</description>
@@ -127,6 +102,13 @@
               <dataBits>16</dataBits><xmitBits>16</xmitBits><xmitBytes>2</xmitBytes>
               <scaling>0.01</scaling>
               <rangeMin>0</rangeMin><rangeMax>900</rangeMax>
+            </signal>
+            <signal name="pack_current" signalType="int16">
+              <description>Pack current, positive on discharge.</description>
+              <updateRateHz>10</updateRateHz><units>A</units>
+              <dataBits>16</dataBits><xmitBits>16</xmitBits><xmitBytes>2</xmitBytes>
+              <scaling>0.1</scaling>
+              <rangeMin>-600</rangeMin><rangeMax>600</rangeMax>
             </signal>
             <signal name="state_of_charge" signalType="uint8">
               <description>Estimated state of charge.</description>

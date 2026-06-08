@@ -1,41 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  DEMONSTRATION ICD — full capability:
-    * Interface -> Packets -> Signals grouping
-    * Multiple bus types and DAL levels
-    * Signal Type enum incl. the "enum" data type
-    * Data Bits / Xmit Bits / Xmit Bytes, Scale, Offset, Definition
-  Schema-valid against urn:icdgen:icd:1.0.
+  eVTOL Integrated Avionics ICD — Revision B.
+  Adds the AHRS attitude bus and a STATUS packet to the navigation bus; widens
+  the altitude range; refines rotor command scaling; removes state_of_charge
+  (superseded by a dedicated cell-health packet planned for Rev C). New and
+  modified signals cite the AVS change-control ticket that introduced them.
+  Links Rev A as the prior revision so the Change Summary Report auto-populates.
+  4 interfaces, 5 packets, 18 signals. Schema-valid against urn:icdgen:icd:1.0.
 -->
 <icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">
   <metadata>
-    <documentId>ICD-EVTOL-DEMO-100</documentId>
+    <documentId>ICD-EVTOL-AVS-200</documentId>
     <documentTitle>eVTOL Integrated Avionics Interface Control Document</documentTitle>
-    <program>eVTOL-Gen6-Demonstrator</program>
-    <revision>C</revision>
-    <revisionDate>2026-06-01</revisionDate>
+    <program>eVTOL-Gen6</program>
+    <revision>B</revision>
+    <revisionDate>2026-03-22</revisionDate>
     <author>H. Avionics</author>
     <revisionHistory>
       <entry>
         <revision>A</revision><date>2026-01-15</date><author>H. Avionics</author>
-        <description>Initial release.</description>
+        <description>Initial release: navigation position, rotor command, and battery telemetry buses.</description>
       </entry>
       <entry>
         <revision>B</revision><date>2026-03-22</date><author>H. Avionics</author>
-        <description>Added battery management bus.</description>
-      </entry>
-      <entry>
-        <revision>C</revision><date>2026-06-01</date><author>H. Avionics</author>
-        <description>Reorganized signals into packets; added bit-width fields and enum types.</description>
+        <description>Added AHRS attitude bus and navigation STATUS packet; widened altitude range; refined rotor scaling; removed state_of_charge.</description>
       </entry>
     </revisionHistory>
   </metadata>
+  <priorRevisions>
+    <priorRevision revision="A" source="icd_evtol_revA.xml"/>
+  </priorRevisions>
   <interfaces>
     <interface id="IF-NAV-STATE" busType="ARINC664" dal="A">
       <name>Navigation State Bus</name>
       <sourceLru>NAV-COMPUTER</sourceLru>
       <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
-      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <owningDocument>ICD-EVTOL-AVS-200</owningDocument>
       <description>Primary navigation solution over AFDX VL-101.</description>
       <packets>
         <packet name="POSITION">
@@ -52,13 +52,15 @@
               <description>WGS-84 geodetic longitude.</description>
               <updateRateHz>50</updateRateHz><units>deg</units>
               <dataBits>64</dataBits><xmitBits>64</xmitBits><xmitBytes>8</xmitBytes>
+              <definition>Positive east.</definition>
               <rangeMin>-180.0</rangeMin><rangeMax>180.0</rangeMax>
             </signal>
             <signal name="altitude_msl" signalType="float32">
               <description>Altitude above mean sea level.</description>
               <updateRateHz>50</updateRateHz><units>m</units>
               <dataBits>32</dataBits><xmitBits>32</xmitBits><xmitBytes>4</xmitBytes>
-              <rangeMin>-500.0</rangeMin><rangeMax>6000.0</rangeMax>
+              <rangeMin>-500.0</rangeMin><rangeMax>8000.0</rangeMax>
+              <prTicket>AVS-1042</prTicket>
             </signal>
           </signals>
         </packet>
@@ -70,6 +72,7 @@
               <updateRateHz>50</updateRateHz><units></units>
               <dataBits>1</dataBits><xmitBits>1</xmitBits>
               <rangeMin>0</rangeMin><rangeMax>1</rangeMax>
+              <prTicket>AVS-1048</prTicket>
             </signal>
             <signal name="nav_mode" signalType="enum">
               <description>Active navigation mode.</description>
@@ -77,6 +80,7 @@
               <dataBits>3</dataBits><xmitBits>3</xmitBits>
               <definition>0=GPS,1=INS,2=blended,3=degraded.</definition>
               <rangeMin>0</rangeMin><rangeMax>3</rangeMax>
+              <prTicket>AVS-1048</prTicket>
             </signal>
           </signals>
         </packet>
@@ -87,7 +91,8 @@
       <name>Motor Command Bus</name>
       <sourceLru>FLIGHT-CONTROL-COMPUTER</sourceLru>
       <destinationLru>MOTOR-CONTROLLER-1</destinationLru>
-      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <owningDocument>ICD-EVTOL-AVS-200</owningDocument>
+      <description>Per-rotor commands from the FCC.</description>
       <packets>
         <packet name="ROTOR_CMD">
           <description>Per-rotor commands at 100 Hz.</description>
@@ -96,9 +101,10 @@
               <description>Commanded rotor speed.</description>
               <updateRateHz>100</updateRateHz><units>rpm</units>
               <dataBits>16</dataBits><xmitBits>19</xmitBits><xmitBytes>3</xmitBytes>
-              <scaling>0.5</scaling>
-              <definition>0.5 rpm per LSB, BNR.</definition>
+              <scaling>0.25</scaling>
+              <definition>0.25 rpm per LSB, BNR (refined resolution).</definition>
               <rangeMin>0</rangeMin><rangeMax>6000</rangeMax>
+              <prTicket>AVS-1051</prTicket>
             </signal>
             <signal name="torque_limit" signalType="int16">
               <description>Signed torque limit.</description>
@@ -112,14 +118,72 @@
       </packets>
     </interface>
 
+    <interface id="IF-AHRS" busType="ARINC429" dal="A">
+      <name>Attitude and Heading Reference Bus</name>
+      <sourceLru>AHRS-UNIT</sourceLru>
+      <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
+      <owningDocument>ICD-EVTOL-AVS-200</owningDocument>
+      <description>Attitude and body rates at 100 Hz.</description>
+      <packets>
+        <packet name="ATTITUDE">
+          <description>Euler attitude and body angular rates.</description>
+          <signals>
+            <signal name="roll" signalType="float32">
+              <description>Roll angle, right-wing-down positive.</description>
+              <updateRateHz>100</updateRateHz><units>deg</units>
+              <dataBits>32</dataBits><xmitBits>32</xmitBits><xmitBytes>4</xmitBytes>
+              <rangeMin>-180.0</rangeMin><rangeMax>180.0</rangeMax>
+              <prTicket>AVS-1063</prTicket>
+            </signal>
+            <signal name="pitch" signalType="float32">
+              <description>Pitch angle, nose-up positive.</description>
+              <updateRateHz>100</updateRateHz><units>deg</units>
+              <dataBits>32</dataBits><xmitBits>32</xmitBits><xmitBytes>4</xmitBytes>
+              <rangeMin>-90.0</rangeMin><rangeMax>90.0</rangeMax>
+              <prTicket>AVS-1063</prTicket>
+            </signal>
+            <signal name="yaw" signalType="float32">
+              <description>Heading, true north reference.</description>
+              <updateRateHz>100</updateRateHz><units>deg</units>
+              <dataBits>32</dataBits><xmitBits>32</xmitBits><xmitBytes>4</xmitBytes>
+              <rangeMin>0.0</rangeMin><rangeMax>360.0</rangeMax>
+              <prTicket>AVS-1063</prTicket>
+            </signal>
+            <signal name="roll_rate" signalType="float32">
+              <description>Body roll rate.</description>
+              <updateRateHz>100</updateRateHz><units>deg/s</units>
+              <dataBits>32</dataBits><xmitBits>32</xmitBits><xmitBytes>4</xmitBytes>
+              <rangeMin>-300.0</rangeMin><rangeMax>300.0</rangeMax>
+              <prTicket>AVS-1063</prTicket>
+            </signal>
+            <signal name="pitch_rate" signalType="float32">
+              <description>Body pitch rate.</description>
+              <updateRateHz>100</updateRateHz><units>deg/s</units>
+              <dataBits>32</dataBits><xmitBits>32</xmitBits><xmitBytes>4</xmitBytes>
+              <rangeMin>-300.0</rangeMin><rangeMax>300.0</rangeMax>
+              <prTicket>AVS-1063</prTicket>
+            </signal>
+            <signal name="yaw_rate" signalType="float32">
+              <description>Body yaw rate.</description>
+              <updateRateHz>100</updateRateHz><units>deg/s</units>
+              <dataBits>32</dataBits><xmitBits>32</xmitBits><xmitBytes>4</xmitBytes>
+              <rangeMin>-300.0</rangeMin><rangeMax>300.0</rangeMax>
+              <prTicket>AVS-1063</prTicket>
+            </signal>
+          </signals>
+        </packet>
+      </packets>
+    </interface>
+
     <interface id="IF-BMS-CAN" busType="CAN" dal="C">
       <name>Battery Management Bus</name>
       <sourceLru>BATTERY-MGMT-SYSTEM</sourceLru>
       <destinationLru>FLIGHT-CONTROL-COMPUTER</destinationLru>
-      <owningDocument>ICD-EVTOL-DEMO-100</owningDocument>
+      <owningDocument>ICD-EVTOL-AVS-200</owningDocument>
+      <description>Pack-level battery telemetry, CAN 2.0B.</description>
       <packets>
         <packet name="PACK_TELEMETRY">
-          <description>Pack-level telemetry, CAN 2.0B.</description>
+          <description>Pack-level telemetry.</description>
           <signals>
             <signal name="pack_voltage" signalType="uint16">
               <description>Pack terminal voltage.</description>
@@ -128,11 +192,12 @@
               <scaling>0.01</scaling>
               <rangeMin>0</rangeMin><rangeMax>900</rangeMax>
             </signal>
-            <signal name="state_of_charge" signalType="uint8">
-              <description>Estimated state of charge.</description>
-              <updateRateHz>1</updateRateHz><units>%</units>
-              <dataBits>8</dataBits><xmitBits>8</xmitBits><xmitBytes>1</xmitBytes>
-              <rangeMin>0</rangeMin><rangeMax>100</rangeMax>
+            <signal name="pack_current" signalType="int16">
+              <description>Pack current, positive on discharge.</description>
+              <updateRateHz>10</updateRateHz><units>A</units>
+              <dataBits>16</dataBits><xmitBits>16</xmitBits><xmitBytes>2</xmitBytes>
+              <scaling>0.1</scaling>
+              <rangeMin>-600</rangeMin><rangeMax>600</rangeMax>
             </signal>
             <signal name="bms_fault" signalType="bool">
               <description>Aggregate battery fault flag.</description>
