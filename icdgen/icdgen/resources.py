@@ -30,16 +30,25 @@ def _first_existing(*candidates: str) -> str:
 def xsd_template_path() -> str:
     """Path to the XSD TEMPLATE (with @SIGNAL_TYPES@/@ENUM_TYPES@ markers).
 
+    SINGLE SOURCE OF TRUTH: the template lives only inside the package, at
+    icdgen/schemas/icd-1.0.xsd.template. It ships in both a source checkout and a
+    pip wheel (it is package data), so one copy covers every install mode and
+    there is no second file to drift out of sync. For a PyInstaller bundle the
+    same relative path is resolved under sys._MEIPASS.
+
     The signal and interface-enum portions are injected from the field registry
     at load time (see schema_gen.assemble_xsd), so the schema can never drift
-    from the registry.
+    from the registry either.
     """
-    base = _base_dir()
     here = os.path.dirname(os.path.abspath(__file__))
-    return _first_existing(
-        os.path.join(base, "schemas", "icd-1.0.xsd.template"),
-        os.path.join(here, "schemas", "icd-1.0.xsd.template"),
-    )
+    pkg_copy = os.path.join(here, "schemas", "icd-1.0.xsd.template")
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        frozen = os.path.join(meipass, "icdgen", "schemas",
+                              "icd-1.0.xsd.template")
+        if os.path.exists(frozen):
+            return frozen
+    return pkg_copy
 
 
 def compiled_xsd() -> str:
