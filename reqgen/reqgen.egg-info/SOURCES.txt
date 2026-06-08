@@ -7,7 +7,9 @@ reqgen/config_io.py
 reqgen/config_schema.py
 reqgen/export.py
 reqgen/generate.py
+reqgen/paths.py
 reqgen/provenance.py
+reqgen/reconcile.py
 reqgen.egg-info/PKG-INFO
 reqgen.egg-info/SOURCES.txt
 reqgen.egg-info/dependency_links.txt

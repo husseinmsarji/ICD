@@ -6,11 +6,16 @@ build-backend = "setuptools.build_meta"
 name = "reqgen"
 version = "0.1.0"
 description = "Deterministic requirement generator over an icdgen ICD"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["icdgen"]
 
 [project.scripts]
 reqgen = "reqgen.cli:main"
 
+# Explicit package layout (mirrors icdgen). The importable package is the inner
+# reqgen/reqgen/ folder. Declaring it explicitly (rather than auto-find) means a
+# flattened tree does not silently build a broken namespace package; the
+# test_package_is_properly_nested guard then fails loudly in CI.
 [tool.setuptools]
 packages = ["reqgen"]

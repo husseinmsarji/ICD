@@ -149,3 +149,32 @@ def test_provenance_has_both_hashes():
     banner = "\n".join(p.banner_lines())
     assert "i" * 64 in banner
     assert "c" * 64 in banner
+
+
+# ---- config-location convention (baked into code) ----
+def test_default_config_path_is_inside_reqgen_project(monkeypatch):
+    """The default config lives at reqgen/config/reqgen.json — inside the reqgen
+    project dir (parent of the package), not at the repo root."""
+    from reqgen.paths import default_config_path, ENV_VAR
+    import reqgen.paths as _paths
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    got = default_config_path()
+    pkg_dir = os.path.dirname(os.path.abspath(_paths.__file__))   # reqgen/reqgen
+    proj = os.path.dirname(pkg_dir)                               # reqgen
+    assert got == os.path.join(proj, "config", "reqgen.json")
+    # It is under the reqgen project, and ends with config/reqgen.json.
+    assert got.endswith(os.path.join("config", "reqgen.json"))
+
+
+def test_default_config_path_env_override(tmp_path, monkeypatch):
+    from reqgen.paths import default_config_path, ENV_VAR
+    monkeypatch.setenv(ENV_VAR, "/custom/reqgen.json")
+    assert default_config_path(str(tmp_path)) == "/custom/reqgen.json"
+
+
+def test_package_is_properly_nested():
+    """Guard the double-nesting: reqgen.cli must import as an installed package
+    (i.e. the modules live in reqgen/reqgen/, not flattened into reqgen/)."""
+    import importlib
+    assert importlib.import_module("reqgen.cli")
+    assert importlib.import_module("reqgen.paths")

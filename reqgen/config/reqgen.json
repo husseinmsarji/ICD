@@ -1,0 +1,18 @@
+{
+  "config_version": "1.0",
+  "id_format_l3": "{prefix}-L3-{iface}-{packet}-{aspect}",
+  "id_format_l4": "{prefix}-L4-{iface}-{packet}-{signal}-{aspect}",
+  "interfaces": {},
+  "l3_aspects": [
+    "EXISTS",
+    "DAL"
+  ],
+  "l3_granularity": "packet",
+  "l4_aspects": [
+    "TYPE",
+    "RANGE"
+  ],
+  "program_prefix": "REQ",
+  "signals": {},
+  "templates": {}
+}

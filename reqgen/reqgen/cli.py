@@ -17,6 +17,7 @@ from icdgen.loader import ValidationError, load
 from .config_io import ConfigError, config_hash, ensure_config, load_config
 from .export import EXPORTERS
 from .generate import generate_requirements
+from .paths import ENV_VAR, default_config_path
 from .provenance import TOOL_NAME, TOOL_VERSION, ReqProvenance
 from .reconcile import reconcile, render_text
 
@@ -100,8 +101,11 @@ def build_parser() -> argparse.ArgumentParser:
                     "export, reconciliation).")
     p.add_argument("--version", action="version",
                    version=f"{TOOL_NAME} {TOOL_VERSION}")
-    p.add_argument("-c", "--config", default="reqgen.json",
-                   help="config file (created from defaults if absent)")
+    p.add_argument("-c", "--config", default=None,
+                   help=f"config file. Default: the conventional "
+                        f"config/reqgen.json found by walking up from the "
+                        f"current directory (override with ${ENV_VAR}). Created "
+                        f"from defaults if absent.")
     sub = p.add_subparsers(dest="command", required=True)
 
     pi = sub.add_parser("init", help="Create/refresh the config file.")
@@ -124,6 +128,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if getattr(args, "config", None) is None:
+        args.config = default_config_path()
     return args.func(args)
 
 

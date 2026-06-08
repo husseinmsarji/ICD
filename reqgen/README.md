@@ -46,19 +46,45 @@ A generated module traces to **three anchors**: the reqgen tool version, the
 SHA-256 of the exact ICD it read, and the SHA-256 of the exact config that drove
 it. Two inputs, both hashed → reproducible from a known ICD + known config.
 
+## Config location (baked into the code)
+
+The config of record lives at **`reqgen/config/reqgen.json`** — a `config/`
+folder in the first layer of the reqgen project (alongside `pyproject.toml`),
+NOT at the repo root next to `icdgen/`. It is a version-controlled qualification
+artifact. This convention is in the code (`paths.py`), so you do not pass `-c` in
+normal use:
+
+- The CLI resolves the default relative to the reqgen package itself, so it
+  points at `reqgen/config/reqgen.json` regardless of the current directory.
+- `init` creates that file (and the `config/` folder) on first run.
+- Override with `$REQGEN_CONFIG` (e.g. CI or a non-standard tree) or an explicit
+  `-c PATH`.
+
+Commit `reqgen/config/reqgen.json`: the dual-hash provenance is only meaningful
+if the config a requirement traces to is itself under configuration control.
+
+## Layout requirement
+
+The importable package is the **inner** `reqgen/reqgen/` folder (same
+double-nesting as `icdgen/icdgen/`). `pyproject.toml` declares
+`packages = ["reqgen"]`, so a flattened tree (modules dropped directly in
+`reqgen/`) fails to install with a clear error rather than shipping a broken
+command. The `test_package_is_properly_nested` test guards this in CI.
+
 ## Usage
 
 ```bash
 pip install -e ./icdgen        # the upstream tool (library dependency)
 pip install -e ./reqgen
 
-reqgen -c reqgen.json init                              # create the config file
-reqgen -c reqgen.json generate ICD.xml -o out          # -> out/<docid>_requirements.csv
-reqgen -c reqgen.json reconcile ICD.xml out/<docid>_requirements.csv
+reqgen init                              # creates config/reqgen.json from defaults
+reqgen generate ICD.xml -o out           # -> out/<docid>_requirements.csv
+reqgen reconcile ICD.xml out/<docid>_requirements.csv
 ```
 
 `generate` and `reconcile` auto-create the config from defaults if it is absent,
-so the first run is one command.
+so the first run is one command. Pass `-c PATH` to point at a non-standard
+location.
 
 ## Exporters
 
