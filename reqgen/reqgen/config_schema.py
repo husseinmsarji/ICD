@@ -13,14 +13,38 @@ engineering intent. Behavioral requirements stay human-authored in the RM tool.
 Each aspect declares the exact ICD fields it is ALLOWED to transcribe (its
 `fields`). The UI and the save path enforce that a template's {placeholders}
 stay within that set (plus the structural ID tokens), so a TYPE requirement can
-never quietly start pulling in, say, {dal} — that would cross the bright line.
+never quietly start pulling in, say, {dal} -- that would cross the bright line.
 
 APPLICABILITY (`requires`): each aspect also declares which of its fields must
 be PRESENT (non-blank) in the ICD for the requirement to be emitted. A signal
-with no range must not produce "shall represent values in the range [, ]" — a
+with no range must not produce "shall represent values in the range [, ]" -- a
 vacuous shall-statement is a certification finding. The generator skips the
 aspect instead, and the trace matrix (reqgen trace) reports the element as a
 coverage gap so the omission is visible, never silent.
+
+L3 GRANULARITY (`granularity`): the L3 layer can be written at two granularities,
+reflecting the ICD hierarchy itself (ARP4754A / standard ICD practice):
+
+  * "port"   -- the INTERFACE / PORT contract between two LRUs. An ICD defines,
+                once per interface, the physical+protocol+connectivity facts:
+                which two LRUs it connects, which bus/protocol it conforms to,
+                and the assurance level allocated to it. These are properties of
+                the interface, NOT of any one message it carries. (Example: an
+                ARINC 429 bus has ONE wire speed for the whole bus; a CAN port
+                connects a fixed source and destination.)
+  * "packet" -- the MESSAGE / PACKET layer: which messages the interface
+                provides and how often each is refreshed. A packet's transmit
+                rate is a per-message property (e.g. each ARINC 429 label has
+                its own transmit interval even though the bus speed is fixed),
+                so RATE is a packet-level aspect and is meaningless for a port.
+
+Each L3 aspect therefore declares the granularity/granularities it is valid in.
+The generator only emits an L3 aspect when its granularity matches the active
+`l3_granularity`, so selecting "port" no longer offers RATE (a message concept)
+and selecting "packet" no longer offers the per-interface connectivity aspects.
+L4 (signal) aspects are unaffected by granularity. This keeps every generated
+requirement at the layer where the transcribed fact actually lives -- the kind
+of structural correctness a DER expects in an ICD-derived requirement set.
 """
 from __future__ import annotations
 
@@ -28,8 +52,17 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
+# Granularity tokens for the L3 (interface) layer. PORT = the interface/port
+# contract between LRUs; PACKET = the per-message layer carried on it. BOTH is a
+# convenience for aspects valid at either granularity (e.g. DAL, which can be
+# allocated to an interface as a whole or stated per message).
+GRAN_PORT = "port"
+GRAN_PACKET = "packet"
+GRAN_BOTH = "both"
+
+
 # ---------------------------------------------------------------------------
-# ASPECT REGISTRY — the catalog of structural requirements reqgen can derive.
+# ASPECT REGISTRY -- the catalog of structural requirements reqgen can derive.
 # Each aspect names the ICD field(s) it transcribes and ships a default
 # template. Adding an aspect is a one-entry change here; it then flows to the
 # default config, the resolver, and the UI descriptor.
@@ -43,33 +76,63 @@ class AspectSpec:
     default_template: str    # default wording; {placeholders} are ICD fields
     default_on: bool = True  # generated unless a config/override disables it
     requires: tuple[str, ...] = ()  # fields that must be non-blank to emit
+    # For L3 aspects only: which granularity/granularities this aspect is valid
+    # at. "port" = interface/port contract, "packet" = per-message layer,
+    # "both" = either. Ignored for L4 aspects (signals have no granularity).
+    granularity: str = GRAN_BOTH
 
 
 # L3 = the interface/packet contract between LRUs.
+#      Split by granularity (see module docstring):
+#        PORT aspects   -> the interface/port contract (connectivity, bus, DAL)
+#        PACKET aspects -> the per-message layer (message exists, refresh rate)
 # L4 = the encoding/behavior of an individual signal.
 ASPECTS: tuple[AspectSpec, ...] = (
-    # ---- L3 (interface / packet granularity) ----
+    # ---- L3 @ PORT granularity (the interface/port contract) ----
+    AspectSpec(
+        key="CONNECT", level="L3", label="Interface connectivity",
+        fields=("iface", "source_lru", "destination_lru"),
+        default_template="The {iface} interface shall convey data from "
+                         "{source_lru} to {destination_lru}.",
+        granularity=GRAN_PORT,
+        requires=("source_lru", "destination_lru"),
+    ),
+    AspectSpec(
+        key="BUS", level="L3", label="Bus / protocol",
+        fields=("iface", "bus_type"),
+        default_template="The {iface} interface shall be implemented on a "
+                         "{bus_type} bus.",
+        granularity=GRAN_PORT,
+        requires=("bus_type",),
+    ),
+    # ---- L3 @ PACKET granularity (the per-message layer) ----
     AspectSpec(
         key="EXISTS", level="L3", label="Packet exists",
         fields=("iface", "packet", "bus_type"),
         default_template="The {iface} interface shall provide the {packet} "
                          "packet over {bus_type}.",
+        granularity=GRAN_PACKET,
+        requires=("packet",),
     ),
     AspectSpec(
-        key="RATE", level="L3", label="Packet rate",
-        fields=("packet", "update_rate_hz"),
-        default_template="The {packet} packet shall be transmitted at "
-                         "{update_rate_hz} Hz.",
+        key="RATE", level="L3", label="Packet refresh rate",
+        fields=("iface", "packet", "update_rate_hz"),
+        default_template="The {iface} interface shall transmit the {packet} "
+                         "packet at {update_rate_hz} Hz.",
         default_on=False,   # many programs fold rate into EXISTS; off by default
+        granularity=GRAN_PACKET,
         requires=("update_rate_hz",),
     ),
+    # ---- L3 @ EITHER granularity ----
     AspectSpec(
         key="DAL", level="L3", label="Assurance level",
         fields=("iface", "dal"),
         default_template="The {iface} interface shall be developed to DAL "
                          "{dal}.",
+        granularity=GRAN_BOTH,   # DAL is allocated to the interface; valid in
+                                 # either granularity (de-duplicated in port mode)
     ),
-    # ---- L4 (signal granularity) ----
+    # ---- L4 (signal granularity); granularity field is not used here ----
     AspectSpec(
         key="TYPE", level="L4", label="Signal data type",
         fields=("signal", "signal_type"),
@@ -103,7 +166,37 @@ ASPECTS: tuple[AspectSpec, ...] = (
 ASPECTS_BY_KEY: dict[str, AspectSpec] = {a.key: a for a in ASPECTS}
 L3_ASPECTS: tuple[str, ...] = tuple(a.key for a in ASPECTS if a.level == "L3")
 L4_ASPECTS: tuple[str, ...] = tuple(a.key for a in ASPECTS if a.level == "L4")
-GRANULARITIES: tuple[str, ...] = ("packet", "port")
+GRANULARITIES: tuple[str, ...] = (GRAN_PACKET, GRAN_PORT)
+
+
+def aspect_valid_at(aspect_key: str, granularity: str) -> bool:
+    """True when an L3 aspect is meaningful at the given L3 granularity.
+
+    PORT aspects are valid only in port mode, PACKET aspects only in packet
+    mode, BOTH aspects in either. L4 aspects are always valid (granularity does
+    not apply to signals), so this returns True for them.
+    """
+    a = ASPECTS_BY_KEY[aspect_key]
+    if a.level != "L3":
+        return True
+    if a.granularity == GRAN_BOTH:
+        return True
+    return a.granularity == granularity
+
+
+def l3_aspects_for(granularity: str) -> tuple[str, ...]:
+    """The L3 aspect keys valid at a given granularity, in registry order."""
+    return tuple(a.key for a in ASPECTS
+                 if a.level == "L3" and aspect_valid_at(a.key, granularity))
+
+
+def default_l3_aspects_for(granularity: str) -> list[str]:
+    """The default-ON L3 aspects valid at a granularity (used when switching
+    granularity so the enabled set stays meaningful)."""
+    return [a.key for a in ASPECTS
+            if a.level == "L3" and a.default_on
+            and aspect_valid_at(a.key, granularity)]
+
 
 # ID-format tokens. These are structural locators (not ICD content), so they
 # are always allowed in an id_format string regardless of aspect.
@@ -113,7 +206,7 @@ ID_FORMAT_TOKENS: tuple[str, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# CONFIG MODEL — the in-memory shape of the config file. Built by code (the
+# CONFIG MODEL -- the in-memory shape of the config file. Built by code (the
 # default generator below), edited via CLI/UI, serialized to JSON.
 # ---------------------------------------------------------------------------
 @dataclass
@@ -131,14 +224,19 @@ class InterfaceOverride:
     templates: dict[str, str] = field(default_factory=dict)
 
 
+def _default_l3_aspects() -> list[str]:
+    # Default granularity is "packet"; seed the packet-valid default-ON L3
+    # aspects so a fresh config is self-consistent with its granularity.
+    return default_l3_aspects_for(GRAN_PACKET)
+
+
 @dataclass
 class ReqConfig:
     """The full requirement-generation profile."""
     config_version: str = "1.0"
     program_prefix: str = "REQ"
-    l3_granularity: str = "packet"            # "packet" | "port"
-    l3_aspects: list[str] = field(default_factory=lambda: list(
-        a.key for a in ASPECTS if a.level == "L3" and a.default_on))
+    l3_granularity: str = GRAN_PACKET         # "packet" | "port"
+    l3_aspects: list[str] = field(default_factory=_default_l3_aspects)
     l4_aspects: list[str] = field(default_factory=lambda: list(
         a.key for a in ASPECTS if a.level == "L4" and a.default_on))
     id_format_l3: str = "{prefix}-L3-{iface}-{packet}-{aspect}"
@@ -155,8 +253,8 @@ class ReqConfig:
 
 def default_config() -> ReqConfig:
     """A complete, valid config built from the aspect registry. This is what
-    reqgen writes when no config file exists yet — so the user never starts from
-    a blank file."""
+    reqgen writes when no config file exists yet -- so the user never starts
+    from a blank file."""
     return ReqConfig()
 
 
@@ -164,7 +262,7 @@ def default_config() -> ReqConfig:
 # Bright-line placeholder enforcement.
 #
 # A template may only reference the placeholders its aspect declares. The L3
-# `iface`/`packet`/`bus_type`/`dal` and L4 `signal`/... names come from the
+# `iface`/`packet`/`bus_type`/`dal`/... and L4 `signal`/... names come from the
 # aspect's `fields`. This is the mechanism that keeps a TYPE requirement from
 # silently transcribing, e.g., {dal}: the field is not in TYPE.fields, so a
 # template using it is rejected (see config_io._validate / the web layer).
@@ -228,12 +326,25 @@ def config_descriptor() -> dict:
             "requires": list(a.requires),        # fields gating applicability
             "defaultTemplate": a.default_template,
             "defaultOn": a.default_on,
+            # Granularity validity for L3 aspects (None for L4): the UI uses
+            # this to show only the aspects meaningful at the chosen
+            # granularity, so "port" never offers a packet-only aspect (RATE)
+            # and "packet" never offers a port-only aspect (CONNECT/BUS).
+            "granularity": a.granularity if a.level == "L3" else None,
         })
     return {
         "aspects": aspects,
         "l3Aspects": list(L3_ASPECTS),
         "l4Aspects": list(L4_ASPECTS),
         "granularities": list(GRANULARITIES),
+        # The L3 aspect keys valid at each granularity, so the UI can filter
+        # and the editor can re-seed the enabled set when granularity changes.
+        "l3AspectsByGranularity": {
+            g: list(l3_aspects_for(g)) for g in GRANULARITIES
+        },
+        "defaultL3AspectsByGranularity": {
+            g: default_l3_aspects_for(g) for g in GRANULARITIES
+        },
         "idFormatTokens": list(ID_FORMAT_TOKENS),
         # Default formats so the UI can offer a one-click "reset to default".
         "defaultIdFormatL3": ReqConfig().id_format_l3,

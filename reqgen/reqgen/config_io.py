@@ -2,15 +2,20 @@
 
 The config FILE is the record of truth. reqgen drives it: `ensure_config` writes
 a fully-populated default if none exists, and `save_config` writes edits back to
-the SAME file (this is what the CLI and the UI call — neither holds its own
+the SAME file (this is what the CLI and the UI call -- neither holds its own
 config state). JSON is used to keep reqgen dependency-free and the output
 canonical (sorted keys, fixed separators) so the config hash is stable.
 
-`save_config` is the ONLY writer, so `_validate` is where the bright line is
-enforced: every template (global, per-interface, per-signal) may reference only
-the placeholders its aspect declares. A template that reaches outside that set
-(e.g. a TYPE template using {dal}) is rejected here, so no caller can persist a
-config that crosses the line or that would crash generation with a KeyError.
+`save_config` is the ONLY writer, so `_validate` is where the rules are
+enforced:
+  * the bright line -- every template (global, per-interface, per-signal) may
+    reference only the placeholders its aspect declares;
+  * L3 granularity consistency -- an L3 aspect listed in the enabled set (or an
+    interface override) must be VALID at the configured l3_granularity. A "port"
+    config may not enable a packet-only aspect like RATE, and a "packet" config
+    may not enable a port-only aspect like CONNECT/BUS. This stops a config that
+    would silently generate nothing for that aspect (the generator filters it
+    out) -- a confusing, hard-to-debug no-op -- and turns it into a clear error.
 """
 from __future__ import annotations
 
@@ -23,12 +28,13 @@ from .config_schema import (
     ReqConfig, InterfaceOverride, SignalOverride, default_config,
     ASPECTS_BY_KEY, GRANULARITIES, ID_FORMAT_TOKENS,
     invalid_placeholders, template_placeholders,
+    aspect_valid_at, l3_aspects_for,
 )
 
 
 class ConfigError(Exception):
     """Fatal problem with the config file (bad granularity, unknown aspect,
-    or a template that crosses the bright line)."""
+    a granularity mismatch, or a template that crosses the bright line)."""
 
 
 def _canonical_json(cfg: ReqConfig) -> str:
@@ -38,7 +44,7 @@ def _canonical_json(cfg: ReqConfig) -> str:
 
 
 def config_hash(cfg: ReqConfig) -> str:
-    """SHA-256 of the canonical config text — the provenance anchor."""
+    """SHA-256 of the canonical config text -- the provenance anchor."""
     return hashlib.sha256(_canonical_json(cfg).encode("utf-8")).hexdigest()
 
 
@@ -68,6 +74,21 @@ def _check_id_format(fmt: str, where: str) -> None:
             f"Allowed tokens: {tokens}.")
 
 
+def _check_l3_granularity_fit(aspect_key: str, granularity: str,
+                              where: str) -> None:
+    """Reject an L3 aspect that is not valid at the configured granularity."""
+    spec = ASPECTS_BY_KEY[aspect_key]
+    if spec.level != "L3":
+        return
+    if not aspect_valid_at(aspect_key, granularity):
+        valid = ", ".join(l3_aspects_for(granularity)) or "(none)"
+        raise ConfigError(
+            f"{where}: L3 aspect '{aspect_key}' is not valid at "
+            f"l3_granularity '{granularity}' (it is a "
+            f"'{spec.granularity}'-granularity aspect). Aspects valid at "
+            f"'{granularity}': {valid}.")
+
+
 def _validate(cfg: ReqConfig) -> None:
     if cfg.l3_granularity not in GRANULARITIES:
         raise ConfigError(
@@ -76,6 +97,10 @@ def _validate(cfg: ReqConfig) -> None:
     for key in cfg.l3_aspects + cfg.l4_aspects:
         if key not in ASPECTS_BY_KEY:
             raise ConfigError(f"unknown aspect '{key}'")
+
+    # Enabled L3 aspects must be valid at the configured granularity.
+    for key in cfg.l3_aspects:
+        _check_l3_granularity_fit(key, cfg.l3_granularity, "l3_aspects")
 
     # ID formats reference only structural tokens.
     _check_id_format(cfg.id_format_l3, "id_format_l3")
@@ -95,6 +120,9 @@ def _validate(cfg: ReqConfig) -> None:
                     raise ConfigError(
                         f"interfaces['{iface_id}'].l3_aspects: unknown aspect "
                         f"'{key}'")
+                _check_l3_granularity_fit(
+                    key, cfg.l3_granularity,
+                    f"interfaces['{iface_id}'].l3_aspects")
         for key in ov.suppress:
             if key not in ASPECTS_BY_KEY:
                 raise ConfigError(
@@ -157,7 +185,8 @@ def config_from_dict(d: dict) -> ReqConfig:
 
     Used by the web layer to turn a posted draft into a config object without
     writing it (preview / pre-save validation). Raises ConfigError on a fatal
-    problem, including a bright-line placeholder violation."""
+    problem, including a bright-line placeholder violation or an L3 aspect that
+    does not fit the configured granularity."""
     cfg = _from_dict(d)
     _validate(cfg)
     return cfg
@@ -190,7 +219,7 @@ def save_config(path: str, cfg: ReqConfig) -> None:
 
 def ensure_config(path: str) -> ReqConfig:
     """Return the config at `path`, creating a populated default if absent.
-    This is how reqgen 'drives the file' — the user never starts from blank."""
+    This is how reqgen 'drives the file' -- the user never starts from blank."""
     if os.path.isfile(path):
         return load_config(path)
     cfg = default_config()

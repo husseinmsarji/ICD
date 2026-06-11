@@ -20,6 +20,28 @@ async function req(path, opts = {}) {
   return ct.includes('application/json') ? res.json() : res.text();
 }
 
+// Shared helper: POST a JSON body, get back a file download (CSV/PDF/etc).
+// Throws with the server's message (e.g. which side failed to parse / bright
+// line). Returns the downloaded filename.
+async function downloadPost(path, body, fallbackName) {
+  const res = await fetch(path, { method: 'POST', headers: J, body: JSON.stringify(body) });
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try { const j = await res.json(); if (j.detail) msg = j.detail; } catch { /* not json */ }
+    throw new Error(msg);
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get('content-disposition') || '';
+  const m = cd.match(/filename="?([^"]+)"?/);
+  const filename = m ? m[1] : fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
 export const api = {
   health: () => req('/api/health'),
   options: () => req('/api/meta/options'),
@@ -50,28 +72,29 @@ export const api = {
     req('/api/diff', { method: 'POST', headers: J, body: JSON.stringify({ old: oldDef, new: newDef }) }),
 
   // Two-file diff -> downloads a formatted PDF change report (no JSON).
-  // Throws with the server's message (e.g. which side failed to parse).
-  diffReportPdf: async (oldFile, newFile) => {
+  diffReportPdf: (oldFile, newFile) => {
     const fd = new FormData();
     fd.append('old', oldFile);
     fd.append('new', newFile);
-    const res = await fetch('/api/diff-report', { method: 'POST', body: fd });
-    if (!res.ok) {
-      let msg = `${res.status} ${res.statusText}`;
-      try { const j = await res.json(); if (j.detail) msg = j.detail; } catch { /* not json */ }
-      throw new Error(msg);
-    }
-    const blob = await res.blob();
-    // Pull the filename from the Content-Disposition header when present.
-    const cd = res.headers.get('content-disposition') || '';
-    const m = cd.match(/filename="?([^"]+)"?/);
-    const filename = m ? m[1] : 'icd_diff.pdf';
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-    return filename;
+    // Multipart variant of downloadPost (FormData body, no JSON header).
+    return (async () => {
+      const res = await fetch('/api/diff-report', { method: 'POST', body: fd });
+      if (!res.ok) {
+        let msg = `${res.status} ${res.statusText}`;
+        try { const j = await res.json(); if (j.detail) msg = j.detail; } catch { /* not json */ }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition') || '';
+      const m = cd.match(/filename="?([^"]+)"?/);
+      const filename = m ? m[1] : 'icd_diff.pdf';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      return filename;
+    })();
   },
 
   // ---- reqgen config editor ----
@@ -87,4 +110,11 @@ export const api = {
   reqgenReconcile: (config, icd) =>
     req('/api/reqgen/reconcile', { method: 'POST', headers: J,
       body: JSON.stringify({ config, ...icd }) }),
+  // Requirements-to-signals traceability matrix: JSON (rows + coverage) for the
+  // on-screen table, and a CSV download for the certification artifact.
+  reqgenTrace: (config, icd) =>
+    req('/api/reqgen/trace', { method: 'POST', headers: J,
+      body: JSON.stringify({ config, ...icd }) }),
+  reqgenTraceCsv: (config, icd) =>
+    downloadPost('/api/reqgen/trace.csv', { config, ...icd }, 'req_trace.csv'),
 };

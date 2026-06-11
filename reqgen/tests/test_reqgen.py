@@ -1,9 +1,9 @@
 """Tests for reqgen: config-file driving, determinism, generation, precedence,
-applicability, traceability matrix, reconciliation, and the dual-hash
-provenance anchor.
+applicability, L3 granularity (port vs packet), traceability matrix,
+reconciliation, and the dual-hash provenance anchor.
 
 Examples: the suite runs against the three-revision eVTOL ICD shipped with
-icdgen. revC (DEMO) has 6 interfaces / 8 packets / 31 signals; the revB -> revC
+icdgen. revC (DEMO) has 6 interfaces / 9 packets / 31 signals; the revB -> revC
 pair drives reconciliation (revC adds the VELOCITY signals, e.g. vel_north)."""
 import os
 import sys
@@ -13,9 +13,11 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from reqgen.config_io import (ConfigError, config_hash, ensure_config,
-                              load_config, save_config)
-from reqgen.config_schema import default_config, ASPECTS_BY_KEY
+from reqgen.config_io import (ConfigError, config_from_dict, config_hash,
+                              ensure_config, load_config, save_config)
+from reqgen.config_schema import (default_config, ASPECTS_BY_KEY,
+                                  aspect_valid_at, l3_aspects_for,
+                                  default_l3_aspects_for, config_descriptor)
 from reqgen.generate import generate_requirements
 from reqgen.export import to_csv, EXPORTERS
 from reqgen.reconcile import reconcile
@@ -33,7 +35,7 @@ REVB = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revB.xml")
 
 # revC structural counts (keep in sync with the example file).
 N_IFACES = 6
-N_PACKETS = 8
+N_PACKETS = 9
 N_SIGNALS = 31
 
 
@@ -80,7 +82,7 @@ def test_invalid_aspect_rejected(tmp_path):
 def test_generate_default_counts():
     model, _h, _w = load(DEMO)
     reqs = generate_requirements(model, default_config())
-    # 8 packets * 2 L3 aspects (EXISTS,DAL) + 31 signals * 2 L4 (TYPE,RANGE).
+    # 9 packets * 2 L3 aspects (EXISTS,DAL) + 31 signals * 2 L4 (TYPE,RANGE).
     # Every revC signal carries a concrete type and both range bounds, so the
     # applicability rules drop nothing here.
     n_l3 = sum(1 for r in reqs if r.level == "L3")
@@ -102,13 +104,79 @@ def test_csv_is_deterministic():
     assert to_csv(reqs, _prov()) == to_csv(reqs, _prov())
 
 
-def test_port_granularity_collapses_l3(tmp_path):
+# ---- L3 granularity: port vs packet ----
+def test_granularity_catalog():
+    """RATE/EXISTS are packet-only; CONNECT/BUS are port-only; DAL is both."""
+    assert aspect_valid_at("RATE", "packet") and not aspect_valid_at("RATE", "port")
+    assert aspect_valid_at("EXISTS", "packet") and not aspect_valid_at("EXISTS", "port")
+    assert aspect_valid_at("CONNECT", "port") and not aspect_valid_at("CONNECT", "packet")
+    assert aspect_valid_at("BUS", "port") and not aspect_valid_at("BUS", "packet")
+    assert aspect_valid_at("DAL", "port") and aspect_valid_at("DAL", "packet")
+    assert l3_aspects_for("port") == ("CONNECT", "BUS", "DAL")
+    assert l3_aspects_for("packet") == ("EXISTS", "RATE", "DAL")
+    # L4 aspects are always valid regardless of granularity.
+    assert aspect_valid_at("TYPE", "port") and aspect_valid_at("TYPE", "packet")
+
+
+def test_port_granularity_emits_interface_contract():
+    """Port mode produces one L3 row per INTERFACE with port-contract aspects
+    (CONNECT/BUS/DAL), not the packet-only EXISTS/RATE."""
     model, _h, _w = load(DEMO)
-    cfg = default_config()
-    cfg.l3_granularity = "port"
+    cfg = config_from_dict({
+        "l3_granularity": "port",
+        "l3_aspects": default_l3_aspects_for("port"),   # CONNECT, BUS, DAL
+        "l4_aspects": ["TYPE", "RANGE"],
+    })
     reqs = generate_requirements(model, cfg)
-    # 6 interfaces * 2 L3 aspects (one per interface, not per packet)
-    assert sum(1 for r in reqs if r.level == "L3") == N_IFACES * 2
+    l3 = [r for r in reqs if r.level == "L3"]
+    # 6 interfaces * 3 port aspects (one row per interface, blank packet).
+    assert len(l3) == N_IFACES * 3
+    assert all(r.packet == "" for r in l3)
+    aspects = {r.aspect for r in l3}
+    assert aspects == {"CONNECT", "BUS", "DAL"}
+    assert "EXISTS" not in aspects and "RATE" not in aspects
+    # CONNECT transcribes source -> destination LRUs.
+    connect = next(r for r in l3 if r.aspect == "CONNECT")
+    assert "convey data from" in connect.text
+
+
+def test_port_granularity_rejects_packet_only_aspect():
+    """A port config that enables a packet-only aspect (RATE) is a config
+    error, not a silent no-op."""
+    with pytest.raises(ConfigError):
+        config_from_dict({
+            "l3_granularity": "port",
+            "l3_aspects": ["RATE"],
+            "l4_aspects": ["TYPE"],
+        })
+
+
+def test_packet_granularity_rejects_port_only_aspect():
+    """A packet config that enables a port-only aspect (CONNECT) is rejected."""
+    with pytest.raises(ConfigError):
+        config_from_dict({
+            "l3_granularity": "packet",
+            "l3_aspects": ["CONNECT"],
+            "l4_aspects": ["TYPE"],
+        })
+
+
+def test_packet_granularity_default_is_packet_valid():
+    """The default config's L3 aspects are all valid at the default granularity."""
+    cfg = default_config()
+    assert cfg.l3_granularity == "packet"
+    assert all(aspect_valid_at(k, "packet") for k in cfg.l3_aspects)
+
+
+def test_descriptor_exposes_granularity():
+    d = config_descriptor()
+    g = {a["key"]: a["granularity"] for a in d["aspects"] if a["level"] == "L3"}
+    assert g["RATE"] == "packet" and g["CONNECT"] == "port" and g["DAL"] == "both"
+    assert {a["granularity"] for a in d["aspects"] if a["level"] == "L4"} == {None}
+    assert d["l3AspectsByGranularity"]["port"] == ["CONNECT", "BUS", "DAL"]
+    assert d["l3AspectsByGranularity"]["packet"] == ["EXISTS", "RATE", "DAL"]
+    assert d["defaultL3AspectsByGranularity"]["port"] == ["CONNECT", "BUS", "DAL"]
+    assert d["defaultL3AspectsByGranularity"]["packet"] == ["EXISTS", "DAL"]
 
 
 # ---- applicability (no vacuous requirements) ----
@@ -128,14 +196,12 @@ def test_range_skipped_when_bounds_absent():
     model = replace(model, interfaces=(iface0,) + model.interfaces[1:])
 
     reqs = generate_requirements(model, cfg)
-    target = f"{iface0.id}/{pkt0.name}/{sig0.name}"
     hits = [r for r in reqs
             if (r.iface, r.packet, r.signal) == (iface0.id, pkt0.name, sig0.name)]
     aspects = {r.aspect for r in hits}
     assert "RANGE" not in aspects        # skipped, not vacuous
     assert "TYPE" in aspects             # still covered by TYPE
     assert not any("[, ]" in r.text for r in reqs)
-    del target
 
 
 # ---- precedence ----
@@ -176,6 +242,25 @@ def test_trace_matrix_full_coverage_by_default():
     assert NOT_COVERED not in csv_text
     # Deterministic.
     assert csv_text == render_trace_csv(model, reqs, _prov())
+
+
+def test_trace_matrix_port_granularity_rows():
+    """In port mode the trace matrix has one L3 row per interface (blank
+    packet), and still one L4 row per signal."""
+    model, _h, _w = load(DEMO)
+    cfg = config_from_dict({
+        "l3_granularity": "port",
+        "l3_aspects": default_l3_aspects_for("port"),
+        "l4_aspects": ["TYPE", "RANGE"],
+    })
+    reqs = generate_requirements(model, cfg)
+    rows = build_trace_rows(model, reqs)
+    l3 = [r for r in rows if r.level == "L3"]
+    assert len(l3) == N_IFACES
+    assert all(r.packet == "" for r in l3)
+    assert sum(1 for r in rows if r.level == "L4") == N_SIGNALS
+    summary = coverage_summary(rows)
+    assert summary["L3"]["uncovered"] == []   # every interface covered
 
 
 def test_trace_matrix_reports_gap_when_signal_fully_suppressed():
@@ -237,7 +322,6 @@ def test_default_config_path_is_inside_reqgen_project(monkeypatch):
     pkg_dir = os.path.dirname(os.path.abspath(_paths.__file__))   # reqgen/reqgen
     proj = os.path.dirname(pkg_dir)                               # reqgen
     assert got == os.path.join(proj, "config", "reqgen.json")
-    # It is under the reqgen project, and ends with config/reqgen.json.
     assert got.endswith(os.path.join("config", "reqgen.json"))
 
 

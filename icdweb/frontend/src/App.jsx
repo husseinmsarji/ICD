@@ -21,6 +21,31 @@ export default function App() {
   const [view, setView] = useState('editor');    // 'editor' | 'reqgen'
   const fileRef = useRef();
 
+  // ---- reqgen editor state LIVES HERE (lifted out of ReqgenPanel) ----
+  // Why: the reqgen panel is only mounted on its own tab. If it owned this
+  // state, switching to the ICD Editor tab would unmount it and React would
+  // discard the draft, preview, trace, and chosen ICD source. Holding it in
+  // App (which never unmounts) makes the panel survive tab switches; the
+  // panel becomes a controlled view over this state. The config FILE is still
+  // the single record of truth — `reqgen` is just an unsaved draft until Save.
+  const [reqgen, setReqgen] = useState({
+    meta: null,            // aspect-registry descriptor
+    draft: null,           // working config (mutable, unsaved)
+    savedHash: null,       // hash of the config of record
+    path: '',
+    icdProjectId: '',      // chosen ICD source (saved project)
+    uploadXml: null,       // {text, name} chosen ICD source (uploaded file)
+    preview: null,         // last requirements preview
+    recon: null,           // last reconcile result
+    trace: null,           // last traceability matrix {rows, summary, documentId}
+    filter: { level: 'ALL', iface: 'ALL' },
+    loaded: false,         // bootstrap guard (fetch meta+config only once)
+  });
+  // Stable merge helper so the panel can patch slices of reqgen state.
+  const patchReqgen = useCallback((p) => {
+    setReqgen((prev) => ({ ...prev, ...(typeof p === 'function' ? p(prev) : p) }));
+  }, []);
+
   const showToast = useCallback((msg, err = false) => {
     setToast({ msg, err });
     setTimeout(() => setToast(null), 3200);
@@ -179,52 +204,63 @@ export default function App() {
         {projects.length === 0 && <div className="muted" style={{ padding: 16, fontSize: 12 }}>No projects yet.</div>}
       </div>
 
+      {/*
+        Both views are mounted at once; only the active one is shown. Keeping
+        ReqgenPanel mounted (display:none when inactive) is what preserves the
+        reqgen draft/preview/trace across tab switches — combined with the
+        lifted state above, nothing is lost when the user flips to the editor.
+      */}
       <div className="main">
-        {view === 'reqgen' ? (
-          <ReqgenPanel projects={projects} onToast={showToast} />
-        ) : !definition ? (
-          <>
-            <div className="empty" style={{ height: 'auto', paddingTop: 40, paddingBottom: 30 }}>
-              <div style={{ fontSize: 40 }}>⌖</div>
-              <div>No project open.</div>
-              <div className="row">
-                <button className="btn primary" onClick={newProject}>Create new ICD</button>
-                <button className="btn" onClick={() => fileRef.current.click()}>Import a file</button>
+        <div style={{ display: view === 'editor' ? 'block' : 'none' }}>
+          {!definition ? (
+            <>
+              <div className="empty" style={{ height: 'auto', paddingTop: 40, paddingBottom: 30 }}>
+                <div style={{ fontSize: 40 }}>⌖</div>
+                <div>No project open.</div>
+                <div className="row">
+                  <button className="btn primary" onClick={newProject}>Create new ICD</button>
+                  <button className="btn" onClick={() => fileRef.current.click()}>Import a file</button>
+                </div>
               </div>
-            </div>
-            <DiffPanel onToast={showToast} />
-          </>
-        ) : (
-          <>
-            <MetadataEditor meta={definition.metadata} onChange={setMeta}
-              onPriorFile={setPriorFile} priorFiles={priorFiles} />
-
-            <div className="row" style={{ margin: '20px 0 10px' }}>
-              <h2 style={{ fontSize: 13, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--ink-1)' }}>
-                Interfaces ({definition.interfaces.length})
-              </h2>
-              <span className="spacer" />
-              <button className="btn sm" onClick={addIface}>+ Add interface</button>
-            </div>
-
-            {definition.interfaces.map((iface, idx) => (
-              <InterfaceEditor key={idx} iface={iface} index={idx} options={options}
-                onChange={(x) => setIface(idx, x)} onRemove={() => removeIface(idx)} />
-            ))}
-            {definition.interfaces.length === 0 && (
-              <div className="muted" style={{ padding: 16 }}>No interfaces. Add one to begin.</div>
-            )}
-
-            <div style={{ marginTop: 22 }}>
-              <GeneratePanel projectId={activeId} definition={definition} options={options}
-                priorFiles={priorFiles} onToast={showToast} />
-            </div>
-
-            <div style={{ marginTop: 22 }}>
               <DiffPanel onToast={showToast} />
-            </div>
-          </>
-        )}
+            </>
+          ) : (
+            <>
+              <MetadataEditor meta={definition.metadata} onChange={setMeta}
+                onPriorFile={setPriorFile} priorFiles={priorFiles} />
+
+              <div className="row" style={{ margin: '20px 0 10px' }}>
+                <h2 style={{ fontSize: 13, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--ink-1)' }}>
+                  Interfaces ({definition.interfaces.length})
+                </h2>
+                <span className="spacer" />
+                <button className="btn sm" onClick={addIface}>+ Add interface</button>
+              </div>
+
+              {definition.interfaces.map((iface, idx) => (
+                <InterfaceEditor key={idx} iface={iface} index={idx} options={options}
+                  onChange={(x) => setIface(idx, x)} onRemove={() => removeIface(idx)} />
+              ))}
+              {definition.interfaces.length === 0 && (
+                <div className="muted" style={{ padding: 16 }}>No interfaces. Add one to begin.</div>
+              )}
+
+              <div style={{ marginTop: 22 }}>
+                <GeneratePanel projectId={activeId} definition={definition} options={options}
+                  priorFiles={priorFiles} onToast={showToast} />
+              </div>
+
+              <div style={{ marginTop: 22 }}>
+                <DiffPanel onToast={showToast} />
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{ display: view === 'reqgen' ? 'block' : 'none' }}>
+          <ReqgenPanel projects={projects} onToast={showToast}
+            state={reqgen} patch={patchReqgen} />
+        </div>
       </div>
 
       <div className="statusbar">

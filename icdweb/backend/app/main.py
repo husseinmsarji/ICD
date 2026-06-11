@@ -24,6 +24,8 @@ requirement-generation config editor). Endpoints:
   PUT    /api/reqgen/config           validate + save a config draft (400 on
                                       bright-line / schema violation)
   POST   /api/reqgen/preview          generate requirements from a draft config
+  POST   /api/reqgen/trace            traceability matrix (rows + coverage)
+  POST   /api/reqgen/trace.csv        traceability matrix as a CSV download
   POST   /api/reqgen/reconcile        draft-vs-saved requirement diff
 
 The static React build is mounted at / when present (single-container deploy).
@@ -298,7 +300,8 @@ def export_xml(project_id: str):
 # The config FILE is the single record of truth and reqgen.config_io.save_config
 # is its only writer. These routes are a thin pass-through to reqgen_service,
 # which never holds its own config state. PUT validates (bright line included)
-# and 400s on a bad draft; preview/reconcile generate in-memory and never write.
+# and 400s on a bad draft; preview/trace/reconcile generate in-memory and never
+# write.
 # ==========================================================================
 @app.get("/api/reqgen/meta")
 def reqgen_meta():
@@ -333,6 +336,40 @@ def reqgen_preview(payload: dict = Body(...)):
     except ValidationError as exc:
         raise HTTPException(400, f"ICD did not validate: {exc}")
     return result
+
+
+@app.post("/api/reqgen/trace")
+def reqgen_trace(payload: dict = Body(...)):
+    """Requirements-to-signals traceability matrix (rows + coverage summary)
+    for the posted draft config against the chosen ICD. Read-only."""
+    try:
+        result = reqgen_service.trace(payload or {})
+    except FileNotFoundError:
+        raise HTTPException(404, "ICD project not found")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except ValidationError as exc:
+        raise HTTPException(400, f"ICD did not validate: {exc}")
+    return result
+
+
+@app.post("/api/reqgen/trace.csv")
+def reqgen_trace_csv(payload: dict = Body(...)):
+    """Stream the traceability matrix as a downloadable CSV."""
+    from fastapi.responses import Response
+    try:
+        csv_text, doc_id = reqgen_service.trace_csv(payload or {})
+    except reqgen_service.ConfigError as exc:
+        raise HTTPException(400, str(exc))
+    except FileNotFoundError:
+        raise HTTPException(404, "ICD project not found")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except ValidationError as exc:
+        raise HTTPException(400, f"ICD did not validate: {exc}")
+    fname = f"{doc_id}_req_trace.csv"
+    return Response(csv_text, media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 @app.post("/api/reqgen/reconcile")

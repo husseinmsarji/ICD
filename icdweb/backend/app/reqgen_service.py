@@ -11,7 +11,10 @@ Responsibilities:
   * generate a live requirements PREVIEW from a posted (unsaved) draft against a
     chosen ICD — saved project or just-in-time uploaded XML — without writing,
   * reconcile a draft's output against the SAVED config's output so the editor
-    can show "what your edits change" before you commit.
+    can show "what your edits change" before you commit,
+  * build the requirements-to-signals TRACEABILITY MATRIX from a posted draft
+    against a chosen ICD (rows + coverage summary for the UI), and stream it as
+    a downloadable CSV.
 
 The ICD is read through the authoritative icdgen loader, exactly like the rest
 of icdweb, so a preview validates against the same schema as everything else.
@@ -30,6 +33,7 @@ from reqgen.config_schema import config_descriptor
 from reqgen.generate import generate_requirements
 from reqgen.paths import default_config_path
 from reqgen.reconcile import reconcile as reconcile_reqs
+from reqgen.trace import build_trace_rows, coverage_summary, render_trace_csv
 
 from dataclasses import asdict
 
@@ -83,7 +87,7 @@ def save(config_dict: dict) -> dict:
 
 
 # --------------------------------------------------------------------------
-# ICD source resolution for preview/reconcile
+# ICD source resolution for preview/reconcile/trace
 # --------------------------------------------------------------------------
 def _model_from_project(project_id: str):
     """Load the saved project's definition into an icdgen model."""
@@ -160,6 +164,78 @@ def preview(payload: dict) -> dict:
         "requirements": rows,
         "configHashDraft": config_hash(cfg),
     }
+
+
+# --------------------------------------------------------------------------
+# Trace — requirements-to-signals traceability matrix from the posted draft
+# --------------------------------------------------------------------------
+def _trace_rows_to_dicts(rows) -> list[dict]:
+    return [
+        {
+            "iface": r.iface, "packet": r.packet, "signal": r.signal,
+            "level": r.level, "reqIds": r.req_ids,
+            "reqCount": len(r.req_ids),
+            "covered": r.covered,
+        }
+        for r in rows
+    ]
+
+
+def trace(payload: dict) -> dict:
+    """Build the traceability matrix (rows + coverage) from the posted draft
+    config against the chosen ICD. Validates the draft first; a ConfigError
+    comes back as ok=False. Read-only: never writes the config file."""
+    try:
+        cfg = config_from_dict(payload.get("config") or {})
+    except ConfigError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    model, source = _resolve_model(payload)
+    reqs = generate_requirements(model, cfg)
+    rows = build_trace_rows(model, reqs)
+    summary = coverage_summary(rows)
+
+    return {
+        "ok": True,
+        "source": source,
+        "documentId": model.metadata.document_id,
+        "rows": _trace_rows_to_dicts(rows),
+        "summary": summary,
+        "configHashDraft": config_hash(cfg),
+    }
+
+
+def trace_csv(payload: dict) -> tuple[str, str]:
+    """Render the traceability matrix CSV for download.
+
+    Returns (csv_text, document_id). Raises ConfigError on a bad draft (the
+    route turns it into a 400) and ValueError when no ICD source is given.
+    Uses the ICD hash from the loaded source and the draft config hash so the
+    downloaded CSV's provenance matches what the editor previewed.
+    """
+    cfg = config_from_dict(payload.get("config") or {})   # raises ConfigError
+
+    # Resolve the model AND its ICD hash. For an uploaded file we hash the
+    # uploaded text; for a saved project we hash the canonical serialized XML
+    # (mirrors icd_service.generate()).
+    import hashlib
+    from icdgen.serializer import to_xml
+
+    pid = payload.get("icdProjectId")
+    xml = payload.get("icdXml")
+    if pid:
+        model = _model_from_project(pid)
+        icd_hash = hashlib.sha256(to_xml(model).encode("utf-8")).hexdigest()
+    elif xml:
+        model = _model_from_xml_text(xml)
+        icd_hash = hashlib.sha256(xml.encode("utf-8")).hexdigest()
+    else:
+        raise ValueError("no ICD source: provide icdProjectId or icdXml")
+
+    from reqgen.provenance import ReqProvenance
+    prov = ReqProvenance.create(icd_hash, config_hash(cfg))
+    reqs = generate_requirements(model, cfg)
+    return render_trace_csv(model, reqs, prov), model.metadata.document_id
 
 
 # --------------------------------------------------------------------------

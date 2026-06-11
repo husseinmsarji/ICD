@@ -8,6 +8,13 @@ import { api } from './api.js';
 // holds only a transient DRAFT; the single writer (backend save_config) is
 // reached via Save. It never persists state any other way.
 //
+// STATE OWNERSHIP: all editor state (draft, chosen ICD source, preview, trace,
+// reconcile) lives in App via the `state`/`patch` props, NOT in this
+// component's own useState. App keeps this panel mounted across tab switches
+// (display:none when inactive), so lifting the state there is what makes the
+// reqgen draft survive a switch to the ICD Editor tab and back. This component
+// is now a controlled view over `state`.
+//
 // The editor builds itself from /api/reqgen/meta (the aspect registry
 // descriptor) exactly like the ICD form builds from the field registry, so a
 // new aspect in config_schema.py appears here with no change to this file.
@@ -41,39 +48,56 @@ function badPlaceholders(tmpl, allowed) {
 
 const ID_TOKENS_FALLBACK = ['prefix', 'iface', 'packet', 'signal', 'aspect'];
 
-export default function ReqgenPanel({ projects, onToast }) {
-  const [meta, setMeta] = useState(null);          // descriptor
-  const [draft, setDraft] = useState(null);        // working config (mutable)
-  const [savedHash, setSavedHash] = useState(null);
-  const [path, setPath] = useState('');
+export default function ReqgenPanel({ projects, onToast, state, patch }) {
+  // Pull everything from the lifted state. `patch` merges a slice back into it.
+  const {
+    meta, draft, savedHash, path,
+    icdProjectId, uploadXml, preview, recon, trace, filter, loaded,
+  } = state;
+
+  // Transient UI-only flags that need not survive a tab switch can stay local.
   const [saving, setSaving] = useState(false);
-
-  // ICD source for preview/reconcile.
-  const [icdProjectId, setIcdProjectId] = useState('');
-  const [uploadXml, setUploadXml] = useState(null);   // {text, name}
-  const [preview, setPreview] = useState(null);
-  const [recon, setRecon] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState({ level: 'ALL', iface: 'ALL' });
 
-  // ---- bootstrap: descriptor + config of record ----
+  const setDraft = useCallback((updater) => {
+    patch((prev) => ({
+      ...prev,
+      draft: typeof updater === 'function' ? updater(prev.draft) : updater,
+    }));
+  }, [patch]);
+
+  // ---- bootstrap: descriptor + config of record (ONCE; guarded by loaded) ----
   useEffect(() => {
+    if (loaded) return;
     (async () => {
       try {
         const [m, c] = await Promise.all([api.reqgenMeta(), api.reqgenConfig()]);
-        setMeta(m);
-        setDraft(c.config);
-        setSavedHash(c.configHash);
-        setPath(c.path);
+        patch({ meta: m, draft: c.config, savedHash: c.configHash, path: c.path, loaded: true });
       } catch (e) { onToast?.(String(e.message || e), true); }
     })();
+  }, [loaded, patch, onToast]);
+
+  // An L3 aspect is valid at a granularity when its `granularity` is that mode
+  // or "both"; L4 aspects are always valid. This is the client mirror of the
+  // backend `aspect_valid_at`, so the editor only OFFERS aspects that actually
+  // generate at the chosen granularity (port no longer shows the packet-only
+  // RATE; packet no longer shows the port-only CONNECT/BUS).
+  const aspectValidAt = useCallback((a, gran) => {
+    if (a.level !== 'L3') return true;
+    return a.granularity === 'both' || a.granularity === gran;
   }, []);
 
+  const gran = draft?.l3_granularity || 'packet';
+
+  // L3 aspects are filtered to the active granularity; L4 is shown in full.
   const aspectsByLevel = useMemo(() => {
     const g = { L3: [], L4: [] };
-    (meta?.aspects || []).forEach((a) => g[a.level]?.push(a));
+    (meta?.aspects || []).forEach((a) => {
+      if (a.level === 'L3' && !aspectValidAt(a, gran)) return;
+      g[a.level]?.push(a);
+    });
     return g;
-  }, [meta]);
+  }, [meta, gran, aspectValidAt]);
 
   const aspectByKey = useMemo(() => {
     const o = {};
@@ -90,16 +114,33 @@ export default function ReqgenPanel({ projects, onToast }) {
   }, [draft, aspectByKey]);
 
   // ---- mutate the draft (pure; never writes) ----
-  const patch = (p) => setDraft((d) => ({ ...d, ...p }));
+  const patchDraft = (p) => setDraft((d) => ({ ...d, ...p }));
+
+  // Switching granularity must re-seed the enabled L3 set: the old set may hold
+  // aspects invalid at the new granularity (which the backend would reject) and
+  // is missing the new granularity's aspects. We keep any still-valid enabled
+  // aspect and add the new granularity's defaults, preserving registry order.
+  const setGranularity = (next) => {
+    const validNext = new Set((meta.l3AspectsByGranularity?.[next]) || []);
+    const kept = (draft.l3_aspects || []).filter((k) => validNext.has(k));
+    const defaults = (meta.defaultL3AspectsByGranularity?.[next]) || [];
+    const merged = new Set([...kept, ...defaults]);
+    const ordered = (meta.l3AspectsByGranularity?.[next] || meta.l3Aspects || [])
+      .filter((k) => merged.has(k));
+    patchDraft({ l3_granularity: next, l3_aspects: ordered });
+  };
 
   const toggleAspect = (level, key) => {
     const field = level === 'L3' ? 'l3_aspects' : 'l4_aspects';
     const cur = new Set(draft[field] || []);
     cur.has(key) ? cur.delete(key) : cur.add(key);
-    // Preserve registry order for determinism.
-    const ordered = (level === 'L3' ? meta.l3Aspects : meta.l4Aspects)
-      .filter((k) => cur.has(k));
-    patch({ [field]: ordered });
+    // Preserve registry order for determinism. For L3, order by the
+    // granularity-filtered list so only currently-valid aspects are retained.
+    const order = level === 'L3'
+      ? (meta.l3AspectsByGranularity?.[gran] || meta.l3Aspects)
+      : meta.l4Aspects;
+    const ordered = order.filter((k) => cur.has(k));
+    patchDraft({ [field]: ordered });
   };
 
   const setTemplate = (key, value) => {
@@ -109,13 +150,13 @@ export default function ReqgenPanel({ projects, onToast }) {
     } else {
       templates[key] = value;
     }
-    patch({ templates });
+    patchDraft({ templates });
   };
 
   const resetTemplate = (key) => {
     const templates = { ...(draft.templates || {}) };
     delete templates[key];
-    patch({ templates });
+    patchDraft({ templates });
   };
 
   // ---- dirty + client-side bright-line validity ----
@@ -149,7 +190,7 @@ export default function ReqgenPanel({ projects, onToast }) {
 
   const canSave = templateErrors.length === 0 && !saving;
 
-  // ---- ICD source payload for preview/reconcile ----
+  // ---- ICD source payload for preview/reconcile/trace ----
   const icdPayload = () => {
     if (uploadXml) return { icdXml: uploadXml.text };
     if (icdProjectId) return { icdProjectId };
@@ -159,24 +200,38 @@ export default function ReqgenPanel({ projects, onToast }) {
   const runPreview = async () => {
     const icd = icdPayload();
     if (!icd) { onToast?.('Pick a project or upload an ICD first', true); return; }
-    setBusy(true); setPreview(null); setRecon(null);
+    setBusy(true);
+    patch({ preview: null, recon: null, trace: null });
     try {
-      const [p, r] = await Promise.all([
+      const [p, r, t] = await Promise.all([
         api.reqgenPreview(draft, icd),
         api.reqgenReconcile(draft, icd).catch(() => null),
+        api.reqgenTrace(draft, icd).catch(() => null),
       ]);
       if (!p.ok) { onToast?.(p.error || 'Preview failed', true); }
-      setPreview(p.ok ? p : null);
-      setRecon(r && r.ok ? r : null);
+      patch({
+        preview: p.ok ? p : null,
+        recon: r && r.ok ? r : null,
+        trace: t && t.ok ? t : null,
+      });
     } catch (e) { onToast?.(String(e.message || e), true); }
     finally { setBusy(false); }
+  };
+
+  const downloadTraceCsv = async () => {
+    const icd = icdPayload();
+    if (!icd) { onToast?.('Pick a project or upload an ICD first', true); return; }
+    try {
+      const fname = await api.reqgenTraceCsv(draft, icd);
+      onToast?.(`Downloaded ${fname}`);
+    } catch (e) { onToast?.(String(e.message || e), true); }
   };
 
   const save = async () => {
     setSaving(true);
     try {
       const r = await api.saveReqgenConfig(draft);
-      setSavedHash(r.configHash);
+      patch({ savedHash: r.configHash });
       onToast?.('Config saved');
     } catch (e) {
       // Backend bright-line / schema rejection (400) lands here with its message.
@@ -188,10 +243,13 @@ export default function ReqgenPanel({ projects, onToast }) {
     const f = e.target.files?.[0];
     if (!f) return;
     const reader = new FileReader();
-    reader.onload = () => { setUploadXml({ text: String(reader.result || ''), name: f.name }); setIcdProjectId(''); };
+    reader.onload = () => patch({ uploadXml: { text: String(reader.result || ''), name: f.name }, icdProjectId: '' });
     reader.readAsText(f);
     e.target.value = '';
   };
+
+  const setFilter = (updater) =>
+    patch((prev) => ({ ...prev, filter: typeof updater === 'function' ? updater(prev.filter) : updater }));
 
   if (!meta || !draft) return <div className="muted" style={{ padding: 20 }}>Loading reqgen config…</div>;
 
@@ -214,15 +272,24 @@ export default function ReqgenPanel({ projects, onToast }) {
             <div className="field">
               <label>Program Prefix</label>
               <input value={draft.program_prefix}
-                onChange={(e) => patch({ program_prefix: e.target.value })}
+                onChange={(e) => patchDraft({ program_prefix: e.target.value })}
                 style={{ fontFamily: 'var(--mono)' }} />
             </div>
             <div className="field">
               <label>L3 Granularity</label>
               <select value={draft.l3_granularity}
-                onChange={(e) => patch({ l3_granularity: e.target.value })}>
-                {meta.granularities.map((g) => <option key={g} value={g}>{g}</option>)}
+                onChange={(e) => setGranularity(e.target.value)}>
+                {meta.granularities.map((g) => (
+                  <option key={g} value={g}>
+                    {g === 'port' ? 'port — interface contract' : 'packet — per-message'}
+                  </option>
+                ))}
               </select>
+              <span className="muted mono" style={{ fontSize: 10 }}>
+                {gran === 'port'
+                  ? 'one L3 requirement per interface (connectivity, bus, DAL)'
+                  : 'one L3 requirement per packet (exists, refresh rate)'}
+              </span>
             </div>
             <div className="field">
               <label>Config SHA-256 (saved)</label>
@@ -233,10 +300,10 @@ export default function ReqgenPanel({ projects, onToast }) {
           <div className="grid cols-2" style={{ marginTop: 12 }}>
             <IdFormatField label="L3 ID Format" value={draft.id_format_l3}
               tokens={meta.idFormatTokens} dflt={meta.defaultIdFormatL3}
-              onChange={(v) => patch({ id_format_l3: v })} />
+              onChange={(v) => patchDraft({ id_format_l3: v })} />
             <IdFormatField label="L4 ID Format" value={draft.id_format_l4}
               tokens={meta.idFormatTokens} dflt={meta.defaultIdFormatL4}
-              onChange={(v) => patch({ id_format_l4: v })} />
+              onChange={(v) => patchDraft({ id_format_l4: v })} />
           </div>
         </div>
       </div>
@@ -245,10 +312,14 @@ export default function ReqgenPanel({ projects, onToast }) {
       {['L3', 'L4'].map((level) => (
         <div className="card" key={level}>
           <div className="card-head">
-            <h2>{level} Aspects — {level === 'L3' ? 'Interface / Packet' : 'Signal'}</h2>
+            <h2>{level} Aspects — {level === 'L3'
+              ? (gran === 'port' ? 'Interface / Port' : 'Packet / Message')
+              : 'Signal'}</h2>
             <span className="spacer" />
             <span className="muted mono" style={{ fontSize: 11 }}>
-              {(level === 'L3' ? draft.l3_aspects : draft.l4_aspects).length} enabled
+              {(level === 'L3' ? draft.l3_aspects : draft.l4_aspects)
+                .filter((k) => level === 'L4' || (aspectByKey[k] && aspectValidAt(aspectByKey[k], gran)))
+                .length} enabled
             </span>
           </div>
           <div className="card-body">
@@ -318,7 +389,7 @@ export default function ReqgenPanel({ projects, onToast }) {
             <div className="field">
               <label>ICD from project</label>
               <select value={icdProjectId}
-                onChange={(e) => { setIcdProjectId(e.target.value); setUploadXml(null); }}>
+                onChange={(e) => patch({ icdProjectId: e.target.value, uploadXml: null })}>
                 <option value="">(choose a project)</option>
                 {(projects || []).map((p) => (
                   <option key={p.id} value={p.id}>{p.name} — {p.documentId} rev {p.revision}</option>
@@ -395,6 +466,9 @@ export default function ReqgenPanel({ projects, onToast }) {
         </div>
       </div>
 
+      {/* ---- Requirements-to-signals traceability matrix ---- */}
+      <TraceMatrix trace={trace} onDownload={downloadTraceCsv} hasSource={!!icdPayload()} />
+
       {/* ---- Save bar ---- */}
       <div className="card">
         <div className="card-body row">
@@ -413,6 +487,110 @@ export default function ReqgenPanel({ projects, onToast }) {
             {saving ? 'Saving…' : 'Save config'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Traceability matrix card (signal <-> requirement coverage) ----
+function TraceMatrix({ trace, onDownload, hasSource }) {
+  const [show, setShow] = useState('ALL');   // ALL | GAPS
+  const summary = trace?.summary;
+  const rows = trace?.rows || [];
+  const visible = rows.filter((r) => (show === 'ALL' ? true : !r.covered));
+
+  const gapCount = summary
+    ? (summary.L3?.uncovered?.length || 0) + (summary.L4?.uncovered?.length || 0)
+    : 0;
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>Traceability Matrix — signals → requirements</h2>
+        <span className="spacer" />
+        {trace ? (
+          gapCount === 0
+            ? <span className="ok mono" style={{ fontSize: 11 }}>● full coverage</span>
+            : <span className="bad mono" style={{ fontSize: 11 }}>● {gapCount} NOT COVERED</span>
+        ) : (
+          <span className="muted mono" style={{ fontSize: 11 }}>run a preview to populate</span>
+        )}
+      </div>
+      <div className="card-body">
+        <div className="row" style={{ marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+          <span className="muted" style={{ fontSize: 12 }}>
+            One row per packet (L3) and per signal (L4), each listing the requirement IDs that
+            cover it. An element with no covering requirement is a coverage gap to close with a
+            human-authored requirement in the RM tool.
+          </span>
+          <span className="spacer" />
+          {trace && (
+            <>
+              <select value={show} onChange={(e) => setShow(e.target.value)} style={{ width: 'auto' }}>
+                <option value="ALL">All rows</option>
+                <option value="GAPS">Gaps only</option>
+              </select>
+              <button className="btn" onClick={onDownload} disabled={!hasSource}>
+                ↓ Download trace matrix (CSV)
+              </button>
+            </>
+          )}
+          {!trace && (
+            <button className="btn" onClick={onDownload} disabled={!hasSource}>
+              ↓ Download trace matrix (CSV)
+            </button>
+          )}
+        </div>
+
+        {summary && (
+          <div className="recon-strip" style={{ borderLeftColor: 'var(--phos)' }}>
+            <span className="mono" style={{ fontSize: 11 }}>coverage:</span>
+            <span className="ok">L3 {summary.L3.covered}/{summary.L3.total}</span>
+            <span className="ok">L4 {summary.L4.covered}/{summary.L4.total}</span>
+            {gapCount > 0 && <span className="bad">{gapCount} gap(s)</span>}
+          </div>
+        )}
+
+        {trace && (
+          <div style={{ maxHeight: 460, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r)', marginTop: 12 }}>
+            <table className="sigtable">
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>Lvl</th>
+                  <th>Interface</th>
+                  <th>Packet</th>
+                  <th>Signal</th>
+                  <th style={{ width: 50 }}>#Req</th>
+                  <th>Covering Requirement IDs</th>
+                  <th style={{ width: 100 }}>Coverage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r, i) => (
+                  <tr key={`${r.iface}/${r.packet}/${r.signal}/${i}`}
+                    style={!r.covered ? { background: 'rgba(255,92,92,.06)' } : undefined}>
+                    <td><span className={`tag ${r.level === 'L3' ? 'rx' : 'tx'}`}>{r.level}</span></td>
+                    <td className="mono">{r.iface}</td>
+                    <td className="mono">{r.packet}</td>
+                    <td className="mono">{r.signal}</td>
+                    <td className="mono">{r.reqCount}</td>
+                    <td className="mono" style={{ fontSize: 10.5 }}>{r.reqIds.join('; ')}</td>
+                    <td>
+                      {r.covered
+                        ? <span className="ok mono" style={{ fontSize: 11 }}>COVERED</span>
+                        : <span className="bad mono" style={{ fontSize: 11 }}>NOT COVERED</span>}
+                    </td>
+                  </tr>
+                ))}
+                {visible.length === 0 && (
+                  <tr><td colSpan={7} className="muted" style={{ padding: 14, textAlign: 'center' }}>
+                    {show === 'GAPS' ? 'No coverage gaps — every element is covered.' : 'No rows.'}
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
