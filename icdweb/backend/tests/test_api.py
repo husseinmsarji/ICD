@@ -1,6 +1,10 @@
 """Backend API tests (in-process via FastAPI TestClient).
 
 Run from icdweb/backend with: ICDGEN_DATA_DIR=/tmp/t python -m pytest
+
+Examples: the suite runs against the three-revision eVTOL ICD. revA (3
+interfaces / 3 packets / 9 signals) is the import/CRUD fixture; the revB ->
+revC pair drives the Flow A prior-file test.
 """
 import os
 import tempfile
@@ -12,9 +16,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 
 c = TestClient(app)
-EX = os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                  "icdgen", "examples", "icd_example.xml")
-EX = os.path.abspath(EX)
+_EXAMPLES = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                         "..", "..", "..",
+                                         "icdgen", "examples"))
+EX = os.path.join(_EXAMPLES, "icd_evtol_revA.xml")
 
 
 def _import_example():
@@ -36,7 +41,7 @@ def test_options_lists_formats():
 def test_import_valid_file():
     r = _import_example()
     assert r["ok"] is True
-    assert len(r["definition"]["interfaces"]) == 1
+    assert len(r["definition"]["interfaces"]) == 3
 
 
 def test_create_validate_generate_download():
@@ -88,17 +93,15 @@ def test_path_traversal_blocked():
 def test_generate_with_prior_file_fills_summary():
     """Flow A (web): uploading a prior-revision file via priorFiles populates the
     Change Summary Report column and leaves no temp files behind."""
-    import io, zipfile, re, glob, os as _os
-    revd = _os.path.join(_os.path.dirname(__file__), "..", "..", "..",
-                         "icdgen", "examples", "icd_demo_revD.xml")
-    revb_state = _os.path.join(_os.path.dirname(__file__), "..", "..", "..",
-                               "icdgen", "examples", "icd_demo.xml")
-    with open(_os.path.abspath(revd), "rb") as f:
+    import io, zipfile, os as _os
+    revc = _os.path.join(_EXAMPLES, "icd_evtol_revC.xml")
+    revb_state = _os.path.join(_EXAMPLES, "icd_evtol_revB.xml")
+    with open(revc, "rb") as f:
         imp = c.post("/api/import",
-                     files={"file": ("d.xml", f, "application/xml")}).json()
+                     files={"file": ("c.xml", f, "application/xml")}).json()
     pid = c.post("/api/projects",
                  json={"name": "FA", "definition": imp["definition"]}).json()["id"]
-    prior = open(_os.path.abspath(revb_state), encoding="utf-8").read()
+    prior = open(revb_state, encoding="utf-8").read()
     g = c.post(f"/api/projects/{pid}/generate",
                json={"formats": ["docx"], "priorFiles": {"B": prior}}).json()
     assert g["ok"] is True
@@ -107,7 +110,24 @@ def test_generate_with_prior_file_fills_summary():
     doc = zipfile.ZipFile(io.BytesIO(d.content)).read(
         "word/document.xml").decode("utf-8", "ignore")
     assert "Change Summary Report" in doc
-    # Default summary is PR-grouped. revD's vertical_speed carries no ticket, so
-    # the add is attributed to "(no ticket)". (PR attribution is covered by the
-    # core test test_revision_summary_groups_by_pr_ticket.)
-    assert "+vertical_speed" in doc
+    # Default summary is PR-grouped. The B -> C diff adds the VELOCITY packet
+    # signals under ticket AVS-1101 (e.g. vel_north).
+    assert "+vel_north" in doc
+    assert "AVS-1101" in doc
+
+
+def test_prior_file_revision_key_cannot_escape_output_dir():
+    """A malicious priorFiles key must not produce a temp filename that can
+    leave the project's out/ directory (path-traversal guard). priorFiles keys
+    are user-controlled request data; pre-fix, a key like '/../../X' wrote (and
+    could overwrite) .xml files outside out/."""
+    from app.service import _safe_rev_token
+    for evil in ("/../../etc/x", "..", "a/../../b", "C:\\..\\x", ""):
+        tok = _safe_rev_token(evil)
+        assert tok                       # never empty
+        assert "/" not in tok and "\\" not in tok
+        assert ".." not in tok
+        fname = f".prior_{tok}.xml"
+        assert os.path.basename(fname) == fname
+    # Sanitization is filename-only: a normal letter is untouched.
+    assert _safe_rev_token("B") == "B"

@@ -28,15 +28,15 @@
 /* ---- Packet: {{ pkt.name }}{% if pkt.description %} ({{ pkt.description }}){% endif %} ---- */
 {% for sig in pkt.signals %}
 /* {{ sig.name }}: {{ sig.units or "n/a" }}, range [{{ sig.range_min if sig.range_min is not none else "unspecified" }}, {{ sig.range_max if sig.range_max is not none else "unspecified" }}], {{ sig.update_rate_hz if sig.update_rate_hz is not none else "unspecified" }} Hz, type {{ sig.signal_type or "UNSPECIFIED" }} */
-{% if sig.range_min is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MIN     ({{ num_const(sig, sig.range_min) }})
-{% else %}/* {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MIN: unspecified */
-{% endif %}{% if sig.range_max is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MAX     ({{ num_const(sig, sig.range_max) }})
-{% else %}/* {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_MAX: unspecified */
-{% endif %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_SCALE   ({{ float_const(sig.scaling) }})
-#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_OFFSET  ({{ float_const(sig.offset) }})
-{% if sig.update_rate_hz is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_RATE_HZ ({{ float_const(sig.update_rate_hz) }})
-{% else %}/* {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_RATE_HZ: unspecified */
-{% endif %}{% if sig.data_bits is not none %}#define {{ prefix(iface) }}_{{ pkt.name | upper }}_{{ sig.name | upper }}_DATA_BITS ({{ sig.data_bits }}U)
+{% if sig.range_min is not none %}#define {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_MIN     ({{ num_const(sig, sig.range_min) }})
+{% else %}/* {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_MIN: unspecified */
+{% endif %}{% if sig.range_max is not none %}#define {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_MAX     ({{ num_const(sig, sig.range_max) }})
+{% else %}/* {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_MAX: unspecified */
+{% endif %}#define {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_SCALE   ({{ float_const(sig.scaling) }})
+#define {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_OFFSET  ({{ float_const(sig.offset) }})
+{% if sig.update_rate_hz is not none %}#define {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_RATE_HZ ({{ float_const(sig.update_rate_hz) }})
+{% else %}/* {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_RATE_HZ: unspecified */
+{% endif %}{% if sig.data_bits is not none %}#define {{ prefix(iface) }}_{{ macro(pkt.name) }}_{{ macro(sig.name) }}_DATA_BITS ({{ sig.data_bits }}U)
 {% endif %}{% endfor %}
 
 typedef struct {{ literal_open }}

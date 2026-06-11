@@ -7,6 +7,13 @@ template renders over the canonical model, making them trivially deterministic.
 Optional numeric fields (range_min/range_max/update_rate_hz) may be None on an
 in-progress ICD; the helpers below tolerate None and the template emits a
 placeholder comment instead of a #define in that case.
+
+MACRO-NAME SAFETY: packet names are unconstrained xs:string and signal names
+use the relaxed (non-C-identifier-permitting) pattern, so every token embedded
+in a #define name goes through `macro_token` (sanitize + uppercase). Struct
+FIELD names intentionally stay raw: silently rewriting a wire-mapped field name
+would be worse than the existing non-C-identifier warning, which already covers
+that case.
 """
 from __future__ import annotations
 
@@ -38,7 +45,7 @@ def _env() -> Environment:
 
 
 def _sanitize_upper(s: str) -> str:
-    return re.sub(r"[^A-Za-z0-9]", "_", s).upper()
+    return re.sub(r"[^A-Za-z0-9]", "_", str(s)).upper()
 
 
 def _prefix(iface: Interface) -> str:
@@ -60,6 +67,11 @@ def _packet_struct_name(iface: Interface, pkt: Packet) -> str:
 def _packet_bus_name(iface: Interface, pkt: Packet) -> str:
     return (f"Bus_{re.sub(r'[^A-Za-z0-9]', '_', iface.id)}"
             f"_{re.sub(r'[^A-Za-z0-9]', '_', pkt.name)}")
+
+
+def _m_escape(s) -> str:
+    """Escape a value for a single-quoted MATLAB string literal."""
+    return str(s or "").replace("'", "''")
 
 
 def _float_const(x: float) -> str:
@@ -96,6 +108,7 @@ def render_header(model: IcdModel, prov: Provenance) -> str:
         model=model, prov=prov, guard=guard,
         prefix=_prefix, struct_name=_struct_name,
         packet_struct_name=_packet_struct_name,
+        macro=_sanitize_upper,
         num_const=_num_const, float_const=_float_const,
         literal_open="{", literal_close="}",
     )
@@ -104,4 +117,4 @@ def render_header(model: IcdModel, prov: Provenance) -> str:
 def render_simulink(model: IcdModel, prov: Provenance) -> str:
     tmpl = _env().get_template("simulink_bus.m.j2")
     return tmpl.render(model=model, prov=prov, bus_name=_bus_name,
-                       packet_bus_name=_packet_bus_name)
+                       packet_bus_name=_packet_bus_name, m_escape=_m_escape)

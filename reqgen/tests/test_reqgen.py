@@ -1,5 +1,10 @@
 """Tests for reqgen: config-file driving, determinism, generation, precedence,
-reconciliation, and the dual-hash provenance anchor."""
+applicability, traceability matrix, reconciliation, and the dual-hash
+provenance anchor.
+
+Examples: the suite runs against the three-revision eVTOL ICD shipped with
+icdgen. revC (DEMO) has 6 interfaces / 8 packets / 31 signals; the revB -> revC
+pair drives reconciliation (revC adds the VELOCITY signals, e.g. vel_north)."""
 import os
 import sys
 
@@ -15,14 +20,21 @@ from reqgen.generate import generate_requirements
 from reqgen.export import to_csv, EXPORTERS
 from reqgen.reconcile import reconcile
 from reqgen.provenance import ReqProvenance
+from reqgen.trace import (build_trace_rows, coverage_summary,
+                          render_trace_csv, NOT_COVERED)
 
 from icdgen.loader import load
 
 # Resolve the demo ICD relative to the installed icdgen examples.
 import icdgen
 _ICDGEN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(icdgen.__file__)))
-DEMO = os.path.join(_ICDGEN_DIR, "examples", "icd_demo_revC.xml")
-REVB = os.path.join(_ICDGEN_DIR, "examples", "icd_demo_revB.xml")
+DEMO = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revC.xml")
+REVB = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revB.xml")
+
+# revC structural counts (keep in sync with the example file).
+N_IFACES = 6
+N_PACKETS = 8
+N_SIGNALS = 31
 
 
 def _prov():
@@ -68,11 +80,13 @@ def test_invalid_aspect_rejected(tmp_path):
 def test_generate_default_counts():
     model, _h, _w = load(DEMO)
     reqs = generate_requirements(model, default_config())
-    # 4 packets * 2 L3 aspects (EXISTS,DAL) + 10 signals * 2 L4 (TYPE,RANGE)
+    # 8 packets * 2 L3 aspects (EXISTS,DAL) + 31 signals * 2 L4 (TYPE,RANGE).
+    # Every revC signal carries a concrete type and both range bounds, so the
+    # applicability rules drop nothing here.
     n_l3 = sum(1 for r in reqs if r.level == "L3")
     n_l4 = sum(1 for r in reqs if r.level == "L4")
-    assert n_l3 == 4 * 2
-    assert n_l4 == 10 * 2
+    assert n_l3 == N_PACKETS * 2
+    assert n_l4 == N_SIGNALS * 2
 
 
 def test_ids_are_stable_across_runs():
@@ -93,8 +107,35 @@ def test_port_granularity_collapses_l3(tmp_path):
     cfg = default_config()
     cfg.l3_granularity = "port"
     reqs = generate_requirements(model, cfg)
-    # 3 interfaces * 2 L3 aspects (one per interface, not per packet)
-    assert sum(1 for r in reqs if r.level == "L3") == 3 * 2
+    # 6 interfaces * 2 L3 aspects (one per interface, not per packet)
+    assert sum(1 for r in reqs if r.level == "L3") == N_IFACES * 2
+
+
+# ---- applicability (no vacuous requirements) ----
+def test_range_skipped_when_bounds_absent():
+    """A signal with no declared range must not yield 'range [, ]' text; the
+    RANGE aspect is skipped and the element shows up as a trace-matrix gap if
+    nothing else covers it."""
+    model, _h, _w = load(DEMO)
+    cfg = default_config()
+    # Strip ranges from one signal by rebuilding it (frozen dataclasses).
+    from dataclasses import replace
+    iface0 = model.interfaces[0]
+    pkt0 = iface0.packets[0]
+    sig0 = replace(pkt0.signals[0], range_min=None, range_max=None)
+    pkt0 = replace(pkt0, signals=(sig0,) + pkt0.signals[1:])
+    iface0 = replace(iface0, packets=(pkt0,) + iface0.packets[1:])
+    model = replace(model, interfaces=(iface0,) + model.interfaces[1:])
+
+    reqs = generate_requirements(model, cfg)
+    target = f"{iface0.id}/{pkt0.name}/{sig0.name}"
+    hits = [r for r in reqs
+            if (r.iface, r.packet, r.signal) == (iface0.id, pkt0.name, sig0.name)]
+    aspects = {r.aspect for r in hits}
+    assert "RANGE" not in aspects        # skipped, not vacuous
+    assert "TYPE" in aspects             # still covered by TYPE
+    assert not any("[, ]" in r.text for r in reqs)
+    del target
 
 
 # ---- precedence ----
@@ -120,6 +161,37 @@ def test_signal_suppress_drops_requirement():
     assert not any(r.req_id.endswith("latitude-RANGE") for r in reqs)
 
 
+# ---- requirements traceability matrix ----
+def test_trace_matrix_full_coverage_by_default():
+    model, _h, _w = load(DEMO)
+    reqs = generate_requirements(model, default_config())
+    rows = build_trace_rows(model, reqs)
+    # One L3 row per packet + one L4 row per signal, document order.
+    assert sum(1 for r in rows if r.level == "L3") == N_PACKETS
+    assert sum(1 for r in rows if r.level == "L4") == N_SIGNALS
+    summary = coverage_summary(rows)
+    assert summary["L3"]["uncovered"] == []
+    assert summary["L4"]["uncovered"] == []
+    csv_text = render_trace_csv(model, reqs, _prov())
+    assert NOT_COVERED not in csv_text
+    # Deterministic.
+    assert csv_text == render_trace_csv(model, reqs, _prov())
+
+
+def test_trace_matrix_reports_gap_when_signal_fully_suppressed():
+    model, _h, _w = load(DEMO)
+    cfg = default_config()
+    from reqgen.config_schema import SignalOverride
+    key = "IF-NAV-STATE/POSITION/latitude"
+    cfg.signals[key] = SignalOverride(suppress=["TYPE", "RANGE"])
+    reqs = generate_requirements(model, cfg)
+    rows = build_trace_rows(model, reqs)
+    summary = coverage_summary(rows)
+    assert "IF-NAV-STATE/POSITION.latitude" in summary["L4"]["uncovered"]
+    csv_text = render_trace_csv(model, reqs, _prov())
+    assert NOT_COVERED in csv_text
+
+
 # ---- reconciliation ----
 def test_reconcile_four_states():
     mc, _h, _w = load(DEMO)
@@ -128,10 +200,13 @@ def test_reconcile_four_states():
     current = generate_requirements(mc, cfg)
     prior_csv = to_csv(generate_requirements(mb, cfg), _prov())
     rec = reconcile(current, prior_csv)
-    # revC adds vertical_speed, drops nothing structural from B that C lacks...
     assert rec.has_changes
-    # vertical_speed exists in C, not B -> added
-    assert any("vertical_speed" in i for i in rec.added)
+    # revC adds the VELOCITY packet (vel_north etc.) -> added
+    assert any("vel_north" in i for i in rec.added)
+    # revC removes bms_fault -> removed
+    assert any("bms_fault" in i for i in rec.removed)
+    # revC widens torque_limit's range -> changed
+    assert any("torque_limit" in rid for rid, _o, _n in rec.changed)
 
 
 def test_reconcile_identical_is_clean():

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -166,6 +167,19 @@ def validate_dto(dto: IcdDTO) -> tuple[list[ValidationIssue], list[ValidationIss
         os.unlink(tmp)
 
 
+def _safe_rev_token(rev: str) -> str:
+    """Sanitize a user-supplied revision letter for use inside a filename.
+
+    `prior_files` keys come straight from the request body; without this, a
+    key like '../../x' would let the temp prior file escape the project's
+    output directory (path traversal). The PriorRevision keeps the ORIGINAL
+    revision string (it must match the revision-history letters); only the
+    on-disk filename is sanitized.
+    """
+    token = re.sub(r"[^A-Za-z0-9_-]", "_", str(rev))
+    return token or "_"
+
+
 def generate(project_id: str, formats: list[str],
              prior_files: dict[str, str] | None = None) -> dict:
     """Generate artifacts for a project.
@@ -196,6 +210,8 @@ def generate(project_id: str, formats: list[str],
     # ---- Flow A: materialize uploaded prior-revision files (just-in-time) ----
     # Write each into the output dir and attach synthetic PriorRevision links so
     # rev_summary can resolve them relative to base_dir=out. Tracked for cleanup.
+    # Filenames are sanitized (path-traversal guard); the PriorRevision keeps
+    # the original revision string so summary matching works.
     from icdgen.model import PriorRevision
     prior_tmp_paths: list[str] = []
     if prior_files:
@@ -203,7 +219,7 @@ def generate(project_id: str, formats: list[str],
         for rev, content in prior_files.items():
             if not content:
                 continue
-            fname = f".prior_{rev}.xml"
+            fname = f".prior_{_safe_rev_token(rev)}.xml"
             ppath = os.path.join(out, fname)
             _atomic_write(ppath, content)
             prior_tmp_paths.append(ppath)

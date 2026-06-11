@@ -15,11 +15,11 @@ function icd_bus_objects()
 clear elems;
 {% for sig in pkt.signals %}
 elems({{ loop.index }}) = Simulink.BusElement;
-elems({{ loop.index }}).Name = '{{ sig.name }}';
+elems({{ loop.index }}).Name = '{{ m_escape(sig.name) }}';
 elems({{ loop.index }}).DataType = '{{ sig.simulink_type }}';
 elems({{ loop.index }}).Dimensions = 1;
-elems({{ loop.index }}).Unit = '{{ sig.units }}';
-elems({{ loop.index }}).Description = '{{ (sig.description or "") | replace("'", "''") }}';
+elems({{ loop.index }}).Unit = '{{ m_escape(sig.units) }}';
+elems({{ loop.index }}).Description = '{{ m_escape(sig.description) }}';
 {% endfor %}
 {{ packet_bus_name(iface, pkt) }} = Simulink.Bus;
 {{ packet_bus_name(iface, pkt) }}.Elements = elems;

@@ -14,6 +14,13 @@ Each aspect declares the exact ICD fields it is ALLOWED to transcribe (its
 `fields`). The UI and the save path enforce that a template's {placeholders}
 stay within that set (plus the structural ID tokens), so a TYPE requirement can
 never quietly start pulling in, say, {dal} — that would cross the bright line.
+
+APPLICABILITY (`requires`): each aspect also declares which of its fields must
+be PRESENT (non-blank) in the ICD for the requirement to be emitted. A signal
+with no range must not produce "shall represent values in the range [, ]" — a
+vacuous shall-statement is a certification finding. The generator skips the
+aspect instead, and the trace matrix (reqgen trace) reports the element as a
+coverage gap so the omission is visible, never silent.
 """
 from __future__ import annotations
 
@@ -35,6 +42,7 @@ class AspectSpec:
     fields: tuple[str, ...]  # ICD model attributes this aspect transcribes
     default_template: str    # default wording; {placeholders} are ICD fields
     default_on: bool = True  # generated unless a config/override disables it
+    requires: tuple[str, ...] = ()  # fields that must be non-blank to emit
 
 
 # L3 = the interface/packet contract between LRUs.
@@ -53,6 +61,7 @@ ASPECTS: tuple[AspectSpec, ...] = (
         default_template="The {packet} packet shall be transmitted at "
                          "{update_rate_hz} Hz.",
         default_on=False,   # many programs fold rate into EXISTS; off by default
+        requires=("update_rate_hz",),
     ),
     AspectSpec(
         key="DAL", level="L3", label="Assurance level",
@@ -66,12 +75,14 @@ ASPECTS: tuple[AspectSpec, ...] = (
         fields=("signal", "signal_type"),
         default_template="The {signal} signal shall be encoded as "
                          "{signal_type}.",
+        requires=("signal_type",),
     ),
     AspectSpec(
         key="RANGE", level="L4", label="Signal range",
         fields=("signal", "range_min", "range_max", "units"),
         default_template="The {signal} signal shall represent values in the "
                          "range [{range_min}, {range_max}] {units}.",
+        requires=("range_min", "range_max"),
     ),
     AspectSpec(
         key="SCALE", level="L4", label="Signal scaling",
@@ -85,6 +96,7 @@ ASPECTS: tuple[AspectSpec, ...] = (
         fields=("signal", "units"),
         default_template="The {signal} signal shall be expressed in {units}.",
         default_on=False,   # usually folded into RANGE; off by default
+        requires=("units",),
     ),
 )
 
@@ -213,6 +225,7 @@ def config_descriptor() -> dict:
             "level": a.level,
             "label": a.label,
             "fields": list(a.fields),            # = allowed template placeholders
+            "requires": list(a.requires),        # fields gating applicability
             "defaultTemplate": a.default_template,
             "defaultOn": a.default_on,
         })

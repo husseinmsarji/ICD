@@ -5,8 +5,14 @@ Subcommands:
   generate   Validate then emit all artifacts to an output directory.
   diff       Compare two input files and emit a diff report.
 
-Non-fatal warnings (e.g. missing signal type, non-C-identifier name) are printed
-to stderr but do not change the exit code, so partially-complete ICDs still work.
+Non-fatal warnings (e.g. missing signal type, non-C-identifier name, missing
+PR ticket) are printed to stderr but do not change the exit code, so
+partially-complete ICDs still work.
+
+RELEASE GATE: pass --strict to `validate` or `generate` to treat any warning
+as fatal (exit 1, nothing generated). Drafts run permissive; a formal release
+build runs --strict so no ICD with open warnings can ship into a change
+package or CI release lane.
 """
 from __future__ import annotations
 
@@ -32,6 +38,15 @@ def _write(path: str, text: str) -> None:
         fh.write(text)
 
 
+def _strict_gate(warnings, strict: bool) -> bool:
+    """Returns True when --strict and warnings exist (caller should abort)."""
+    if strict and warnings:
+        _eprint(f"STRICT: {len(warnings)} warning(s) present; aborting "
+                f"(release builds must be warning-free).")
+        return True
+    return False
+
+
 def cmd_validate(args) -> int:
     try:
         model, file_hash, warnings = load(args.input)
@@ -48,6 +63,8 @@ def cmd_validate(args) -> int:
     print(f"  input SHA-256  : {file_hash}")
     for w in warnings:
         _eprint(f"  WARNING: {w.message}")
+    if _strict_gate(warnings, getattr(args, "strict", False)):
+        return 1
     return 0
 
 
@@ -59,6 +76,8 @@ def cmd_generate(args) -> int:
         return 1
     for w in warnings:
         _eprint(f"WARNING: {w.message}")
+    if _strict_gate(warnings, getattr(args, "strict", False)):
+        return 1
 
     prov = Provenance.create(file_hash, model.schema_version)
     out = args.output
@@ -133,6 +152,12 @@ def cmd_diff(args) -> int:
 
 def _write_run_log(out_dir: str, input_path: str, prov: Provenance,
                    produced: list[str]) -> None:
+    """Per-invocation provenance record. The ONLY place wall-clock time
+    appears. Records the full input set: ICD hash, schema (compiled XSD) hash,
+    and every Jinja template's hash, so an overridden template
+    ($ICDGEN_TEMPLATE_DIR) is an auditable input, never a silent substitution.
+    """
+    from .resources import compiled_xsd_hash, template_dir, template_manifest
     log_path = os.path.join(out_dir, "run.log")
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     lines = [
@@ -141,8 +166,13 @@ def _write_run_log(out_dir: str, input_path: str, prov: Provenance,
         f"input_file      : {os.path.abspath(input_path)}",
         f"input_sha256    : {prov.input_hash}",
         f"schema_version  : {prov.schema_version}",
-        "artifacts:",
+        f"compiled_xsd_sha256 : {compiled_xsd_hash()}",
+        f"template_dir    : {os.path.abspath(template_dir())}",
+        "templates:",
     ]
+    lines += [f"  - {name} sha256 {h}"
+              for name, h in template_manifest().items()]
+    lines.append("artifacts:")
     lines += [f"  - {os.path.basename(p)}" for p in produced]
     with open(log_path, "a", encoding="utf-8", newline="\n") as fh:
         fh.write("\n".join(lines) + "\n---\n")
@@ -164,6 +194,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     pv = sub.add_parser("validate", help="Validate an input file.")
     pv.add_argument("input", help="Input ICD definition (.xml or .json)")
+    pv.add_argument("--strict", action="store_true",
+                    help="Treat warnings as fatal (release gate).")
     pv.set_defaults(func=cmd_validate)
 
     pg = sub.add_parser("generate", help="Generate artifacts.")
@@ -173,6 +205,9 @@ def build_parser() -> argparse.ArgumentParser:
     pg.add_argument("-f", "--formats", nargs="+", choices=ALL_FORMATS,
                     default=ALL_FORMATS,
                     help="Subset of artifacts to generate (default: all)")
+    pg.add_argument("--strict", action="store_true",
+                    help="Treat warnings as fatal; generate nothing "
+                         "(release gate).")
     pg.set_defaults(func=cmd_generate)
 
     pd = sub.add_parser("diff", help="Diff two input versions.")
