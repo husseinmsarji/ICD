@@ -2,7 +2,7 @@
 
 Run from icdweb/backend with: ICDGEN_DATA_DIR=/tmp/t python -m pytest
 
-Examples: the suite runs against the three-revision eVTOL ICD. revA (3
+Examples: the suite runs against the three-revision eVTOL ICD (YAML). revA (3
 interfaces / 3 packets / 9 signals) is the import/CRUD fixture; the revB ->
 revC pair drives the Flow A prior-file test.
 """
@@ -19,12 +19,12 @@ c = TestClient(app)
 _EXAMPLES = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                          "..", "..", "..",
                                          "icdgen", "examples"))
-EX = os.path.join(_EXAMPLES, "icd_evtol_revA.xml")
+EX = os.path.join(_EXAMPLES, "icd_evtol_revA.yaml")
 
 
 def _import_example():
     with open(EX, "rb") as f:
-        r = c.post("/api/import", files={"file": ("icd.xml", f, "application/xml")})
+        r = c.post("/api/import", files={"file": ("icd.yaml", f, "application/x-yaml")})
     return r.json()
 
 
@@ -94,11 +94,11 @@ def test_generate_with_prior_file_fills_summary():
     """Flow A (web): uploading a prior-revision file via priorFiles populates the
     Change Summary Report column and leaves no temp files behind."""
     import io, zipfile, os as _os
-    revc = _os.path.join(_EXAMPLES, "icd_evtol_revC.xml")
-    revb_state = _os.path.join(_EXAMPLES, "icd_evtol_revB.xml")
+    revc = _os.path.join(_EXAMPLES, "icd_evtol_revC.yaml")
+    revb_state = _os.path.join(_EXAMPLES, "icd_evtol_revB.yaml")
     with open(revc, "rb") as f:
         imp = c.post("/api/import",
-                     files={"file": ("c.xml", f, "application/xml")}).json()
+                     files={"file": ("c.yaml", f, "application/x-yaml")}).json()
     pid = c.post("/api/projects",
                  json={"name": "FA", "definition": imp["definition"]}).json()["id"]
     prior = open(revb_state, encoding="utf-8").read()
@@ -120,14 +120,14 @@ def test_prior_file_revision_key_cannot_escape_output_dir():
     """A malicious priorFiles key must not produce a temp filename that can
     leave the project's out/ directory (path-traversal guard). priorFiles keys
     are user-controlled request data; pre-fix, a key like '/../../X' wrote (and
-    could overwrite) .xml files outside out/."""
+    could overwrite) files outside out/."""
     from app.service import _safe_rev_token
     for evil in ("/../../etc/x", "..", "a/../../b", "C:\\..\\x", ""):
         tok = _safe_rev_token(evil)
         assert tok                       # never empty
         assert "/" not in tok and "\\" not in tok
         assert ".." not in tok
-        fname = f".prior_{tok}.xml"
+        fname = f".prior_{tok}.yaml"
         assert os.path.basename(fname) == fname
     # Sanitization is filename-only: a normal letter is untouched.
     assert _safe_rev_token("B") == "B"

@@ -12,11 +12,11 @@ requirement-generation config editor). Endpoints:
   POST   /api/projects/{id}/validate  validate current/posted definition
   POST   /api/projects/{id}/generate  generate artifacts
   GET    /api/projects/{id}/artifacts/{filename}   download an artifact
-  POST   /api/import                  parse an uploaded XML/JSON into a definition
+  POST   /api/import                  parse an uploaded YAML into a definition
   POST   /api/diff                    diff two posted definitions
   POST   /api/diff-files              diff two uploaded files (JSON)
   POST   /api/diff-report             diff two uploaded files (PDF download)
-  GET    /api/projects/{id}/export.xml
+  GET    /api/projects/{id}/export.yaml
 
   --- reqgen config editor ---
   GET    /api/reqgen/meta             aspect-registry descriptor for the editor
@@ -42,7 +42,7 @@ from fastapi.staticfiles import StaticFiles
 
 from icdgen.loader import ValidationError, load
 from icdgen.provenance import TOOL_VERSION
-from icdgen.serializer import to_xml
+from icdgen.serializer import to_yaml
 
 from . import service
 from . import reqgen_service
@@ -176,10 +176,9 @@ def download_artifact(project_id: str, filename: str):
 
 @app.post("/api/import")
 async def import_file(file: UploadFile):
-    """Parse an uploaded XML/JSON ICD into an editable definition (no save)."""
+    """Parse an uploaded YAML ICD into an editable definition (no save)."""
     raw = await file.read()
-    suffix = ".json" if (file.filename or "").lower().endswith(".json") else ".xml"
-    with tempfile.NamedTemporaryFile("wb", suffix=suffix, delete=False) as fh:
+    with tempfile.NamedTemporaryFile("wb", suffix=".yaml", delete=False) as fh:
         fh.write(raw)
         tmp = fh.name
     try:
@@ -202,12 +201,11 @@ def diff_definitions(payload: dict = Body(...)):
 
 @app.post("/api/diff-files")
 async def diff_files(old: UploadFile, new: UploadFile):
-    """Diff two uploaded XML/JSON ICD files directly. Each is parsed via the
+    """Diff two uploaded YAML ICD files directly. Each is parsed via the
     authoritative loader; a parse failure on either side returns an error."""
     async def _parse(f: UploadFile):
         raw = await f.read()
-        sfx = ".json" if (f.filename or "").lower().endswith(".json") else ".xml"
-        with tempfile.NamedTemporaryFile("wb", suffix=sfx, delete=False) as fh:
+        with tempfile.NamedTemporaryFile("wb", suffix=".yaml", delete=False) as fh:
             fh.write(raw)
             tmp = fh.name
         try:
@@ -231,7 +229,7 @@ async def diff_files(old: UploadFile, new: UploadFile):
 
 @app.post("/api/diff-report")
 async def diff_report(old: UploadFile, new: UploadFile):
-    """Diff two uploaded XML/JSON ICD files and return a formatted PDF change
+    """Diff two uploaded YAML ICD files and return a formatted PDF change
     report as a download. Either side failing to parse yields a 400 with the
     offending side + message."""
     import hashlib
@@ -241,8 +239,7 @@ async def diff_report(old: UploadFile, new: UploadFile):
 
     async def _parse(f: UploadFile):
         raw = await f.read()
-        sfx = ".json" if (f.filename or "").lower().endswith(".json") else ".xml"
-        with tempfile.NamedTemporaryFile("wb", suffix=sfx, delete=False) as fh:
+        with tempfile.NamedTemporaryFile("wb", suffix=".yaml", delete=False) as fh:
             fh.write(raw)
             tmp = fh.name
         try:
@@ -260,11 +257,11 @@ async def diff_report(old: UploadFile, new: UploadFile):
     if new_err:
         raise HTTPException(400, f"new file: {new_err['message']}")
 
-    # Hash the canonical serialized XML of each side (matches generate()).
-    old_xml = to_xml(old_model)
-    new_xml = to_xml(new_model)
-    old_hash = hashlib.sha256(old_xml.encode("utf-8")).hexdigest()
-    new_hash = hashlib.sha256(new_xml.encode("utf-8")).hexdigest()
+    # Hash the canonical serialized YAML of each side (matches generate()).
+    old_yaml = to_yaml(old_model)
+    new_yaml = to_yaml(new_model)
+    old_hash = hashlib.sha256(old_yaml.encode("utf-8")).hexdigest()
+    new_hash = hashlib.sha256(new_yaml.encode("utf-8")).hexdigest()
 
     res = _diff(old_model, new_model)
     with tempfile.NamedTemporaryFile("wb", suffix=".pdf", delete=False) as fh:
@@ -282,16 +279,16 @@ async def diff_report(old: UploadFile, new: UploadFile):
                     headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
-@app.get("/api/projects/{project_id}/export.xml")
-def export_xml(project_id: str):
+@app.get("/api/projects/{project_id}/export.yaml")
+def export_yaml(project_id: str):
     from fastapi.responses import Response
     try:
         dto = service.read_definition(project_id)
     except FileNotFoundError:
         raise HTTPException(404, "project not found")
     from .schemas import dto_to_model
-    xml = to_xml(dto_to_model(dto))
-    return Response(xml, media_type="application/xml")
+    yaml_text = to_yaml(dto_to_model(dto))
+    return Response(yaml_text, media_type="application/x-yaml")
 
 
 # ==========================================================================

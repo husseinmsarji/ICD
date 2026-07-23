@@ -52,7 +52,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
   // Pull everything from the lifted state. `patch` merges a slice back into it.
   const {
     meta, draft, savedHash, path,
-    icdProjectId, uploadXml, preview, recon, trace, filter, loaded,
+    icdProjectId, uploadYaml, preview, recon, trace, filter, loaded,
   } = state;
 
   // Transient UI-only flags that need not survive a tab switch can stay local.
@@ -192,7 +192,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
 
   // ---- ICD source payload for preview/reconcile/trace ----
   const icdPayload = () => {
-    if (uploadXml) return { icdXml: uploadXml.text };
+    if (uploadYaml) return { icdYaml: uploadYaml.text };
     if (icdProjectId) return { icdProjectId };
     return null;
   };
@@ -243,7 +243,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
     const f = e.target.files?.[0];
     if (!f) return;
     const reader = new FileReader();
-    reader.onload = () => patch({ uploadXml: { text: String(reader.result || ''), name: f.name }, icdProjectId: '' });
+    reader.onload = () => patch({ uploadYaml: { text: String(reader.result || ''), name: f.name }, icdProjectId: '' });
     reader.readAsText(f);
     e.target.value = '';
   };
@@ -389,7 +389,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
             <div className="field">
               <label>ICD from project</label>
               <select value={icdProjectId}
-                onChange={(e) => patch({ icdProjectId: e.target.value, uploadXml: null })}>
+                onChange={(e) => patch({ icdProjectId: e.target.value, uploadYaml: null })}>
                 <option value="">(choose a project)</option>
                 {(projects || []).map((p) => (
                   <option key={p.id} value={p.id}>{p.name} — {p.documentId} rev {p.revision}</option>
@@ -397,8 +397,8 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
               </select>
             </div>
             <div className="field">
-              <label>…or upload an ICD {uploadXml && <span className="ok">✓ {uploadXml.name}</span>}</label>
-              <input type="file" accept=".xml,.json" onChange={onUpload} />
+              <label>…or upload an ICD {uploadYaml && <span className="ok">✓ {uploadYaml.name}</span>}</label>
+              <input type="file" accept=".yaml,.yml" onChange={onUpload} />
             </div>
             <button className="btn primary" disabled={busy} onClick={runPreview}>
               {busy ? 'Generating…' : 'Preview requirements'}

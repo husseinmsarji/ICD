@@ -10,7 +10,7 @@ Design notes:
     generators (gen_docx / gen_pdf) decide how to render it. Swapping the
     summary wording or adding a new line item is a one-function edit here.
   * Prior-revision sources are resolved relative to `base_dir` (the directory of
-    the ICD being generated) so a relative path in the XML works from anywhere.
+    the ICD being generated) so a relative path in the YAML works from anywhere.
   * Missing/unreadable prior files never raise: the summary degrades to a short
     note so generation is robust (a draft may reference a file not yet present).
 """

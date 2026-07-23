@@ -30,8 +30,8 @@ from icdgen.loader import load
 # Resolve the demo ICD relative to the installed icdgen examples.
 import icdgen
 _ICDGEN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(icdgen.__file__)))
-DEMO = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revC.xml")
-REVB = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revB.xml")
+DEMO = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revC.yaml")
+REVB = os.path.join(_ICDGEN_DIR, "examples", "icd_evtol_revB.yaml")
 
 # revC structural counts (keep in sync with the example file).
 N_IFACES = 6

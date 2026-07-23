@@ -160,7 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
     pi.set_defaults(func=cmd_init)
 
     pg = sub.add_parser("generate", help="Generate a requirements export.")
-    pg.add_argument("icd", help="ICD definition (.xml or .json)")
+    pg.add_argument("icd", help="ICD definition (.yaml)")
     pg.add_argument("-o", "--output", default=None,
                     help="output dir (default: stdout)")
     pg.add_argument("-f", "--format", default="csv", choices=list(EXPORTERS),
@@ -170,13 +170,13 @@ def build_parser() -> argparse.ArgumentParser:
     pt = sub.add_parser("trace",
                         help="Requirements traceability matrix + coverage "
                              "gate (exit 2 on gaps).")
-    pt.add_argument("icd", help="ICD definition (.xml or .json)")
+    pt.add_argument("icd", help="ICD definition (.yaml)")
     pt.add_argument("-o", "--output", default=None,
                     help="output dir (default: stdout)")
     pt.set_defaults(func=cmd_trace)
 
     pr = sub.add_parser("reconcile", help="Diff current reqs vs a prior export.")
-    pr.add_argument("icd", help="ICD definition (.xml or .json)")
+    pr.add_argument("icd", help="ICD definition (.yaml)")
     pr.add_argument("prior", help="previously exported reqgen CSV")
     pr.set_defaults(func=cmd_reconcile)
     return p

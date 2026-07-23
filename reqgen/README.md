@@ -1,7 +1,7 @@
 # reqgen
 
 Deterministic **requirement generator** that sits *beside* `icdgen`, not inside
-it. It reads an icdgen ICD (the canonical XML/JSON) as a library input and emits
+it. It reads an icdgen ICD (the canonical YAML) as a library input and emits
 a requirements module for an RM tool (DOORS / Jama / Polarion / etc.), plus a
 reconciliation report. It never writes back into the ICD and shares no mutable
 state with icdgen, so the two tools keep **independent DO-330 qualification
@@ -78,8 +78,8 @@ pip install -e ./icdgen        # the upstream tool (library dependency)
 pip install -e ./reqgen
 
 reqgen init                              # creates config/reqgen.json from defaults
-reqgen generate ICD.xml -o out           # -> out/<docid>_requirements.csv
-reqgen reconcile ICD.xml out/<docid>_requirements.csv
+reqgen generate ICD.yaml -o out          # -> out/<docid>_requirements.csv
+reqgen reconcile ICD.yaml out/<docid>_requirements.csv
 ```
 
 `generate` and `reconcile` auto-create the config from defaults if it is absent,

@@ -6,7 +6,7 @@
 # and any certification evidence tied to a hash. These are the versions against
 # which the deterministic baseline hashes were verified. Bump deliberately, and
 # re-verify the baseline (see AI_README "Determinism contract") when you do.
-lxml==6.0.2
+PyYAML==6.0.1
 jsonschema==4.26.0
 python-docx==1.2.0
 reportlab==4.4.10

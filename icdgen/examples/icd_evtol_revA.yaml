@@ -1,0 +1,149 @@
+# eVTOL Integrated Avionics ICD - Revision A (initial release).
+# Navigation position, rotor command, and battery telemetry buses.
+# 3 interfaces, 3 packets, 9 signals. Schema-valid against icdgen 1.0.
+schemaVersion: "1.0"
+metadata:
+  documentId: "ICD-EVTOL-AVS-200"
+  documentTitle: "eVTOL Integrated Avionics Interface Control Document"
+  program: "eVTOL-Gen6"
+  revision: "A"
+  revisionDate: "2026-01-15"
+  author: "H. Avionics"
+  revisionHistory:
+    - revision: "A"
+      date: "2026-01-15"
+      author: "H. Avionics"
+      description: "Initial release: navigation position, rotor command, and battery telemetry buses."
+interfaces:
+  - id: "IF-NAV-STATE"
+    busType: "ARINC664"
+    dal: "A"
+    name: "Navigation State Bus"
+    sourceLru: "NAV-COMPUTER"
+    destinationLru: "FLIGHT-CONTROL-COMPUTER"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Primary navigation solution over AFDX VL-101."
+    packets:
+      - name: "POSITION"
+        description: "Geodetic position at 50 Hz."
+        signals:
+          - name: "latitude"
+            description: "WGS-84 geodetic latitude."
+            signalType: "float64"
+            updateRateHz: 50
+            units: "deg"
+            dataBits: 64
+            xmitBits: 64
+            xmitBytes: 8
+            definition: "Positive north."
+            rangeMin: -90
+            rangeMax: 90
+          - name: "longitude"
+            description: "WGS-84 geodetic longitude."
+            signalType: "float64"
+            updateRateHz: 50
+            units: "deg"
+            dataBits: 64
+            xmitBits: 64
+            xmitBytes: 8
+            definition: "Positive east."
+            rangeMin: -180
+            rangeMax: 180
+          - name: "altitude_msl"
+            description: "Altitude above mean sea level."
+            signalType: "float32"
+            updateRateHz: 50
+            units: "m"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -500
+            rangeMax: 6000
+  - id: "IF-FCC-MOTOR-CMD"
+    busType: "ARINC429"
+    dal: "A"
+    name: "Motor Command Bus"
+    sourceLru: "FLIGHT-CONTROL-COMPUTER"
+    destinationLru: "MOTOR-CONTROLLER-1"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Per-rotor commands from the FCC."
+    packets:
+      - name: "ROTOR_CMD"
+        description: "Per-rotor commands at 100 Hz."
+        signals:
+          - name: "rotor_speed_cmd"
+            description: "Commanded rotor speed."
+            signalType: "uint16"
+            updateRateHz: 100
+            units: "rpm"
+            dataBits: 16
+            xmitBits: 19
+            xmitBytes: 3
+            scaling: 0.5
+            definition: "0.5 rpm per LSB, BNR."
+            rangeMin: 0
+            rangeMax: 6000
+          - name: "torque_limit"
+            description: "Signed torque limit."
+            signalType: "int16"
+            updateRateHz: 100
+            units: "N*m"
+            dataBits: 16
+            xmitBits: 19
+            xmitBytes: 3
+            scaling: 0.1
+            rangeMin: -400
+            rangeMax: 400
+  - id: "IF-BMS-CAN"
+    busType: "CAN"
+    dal: "C"
+    name: "Battery Management Bus"
+    sourceLru: "BATTERY-MGMT-SYSTEM"
+    destinationLru: "FLIGHT-CONTROL-COMPUTER"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Pack-level battery telemetry, CAN 2.0B."
+    packets:
+      - name: "PACK_TELEMETRY"
+        description: "Pack-level telemetry."
+        signals:
+          - name: "pack_voltage"
+            description: "Pack terminal voltage."
+            signalType: "uint16"
+            updateRateHz: 10
+            units: "V"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.01
+            rangeMin: 0
+            rangeMax: 900
+          - name: "pack_current"
+            description: "Pack current, positive on discharge."
+            signalType: "int16"
+            updateRateHz: 10
+            units: "A"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -600
+            rangeMax: 600
+          - name: "state_of_charge"
+            description: "Estimated state of charge."
+            signalType: "uint8"
+            updateRateHz: 1
+            units: "%"
+            dataBits: 8
+            xmitBits: 8
+            xmitBytes: 1
+            rangeMin: 0
+            rangeMax: 100
+          - name: "bms_fault"
+            description: "Aggregate battery fault flag."
+            signalType: "bool"
+            updateRateHz: 10
+            units: ""
+            dataBits: 1
+            xmitBits: 1
+            rangeMin: 0
+            rangeMax: 1
