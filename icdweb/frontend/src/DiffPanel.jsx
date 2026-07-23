@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { api } from './api.js';
 
-// Two-file "Compare Revisions" panel. Pick an OLD and a NEW ICD (XML or JSON);
+// Two-file "Compare Revisions" panel. Pick an OLD and a NEW ICD (YAML);
 // the backend diffs them and returns a formatted PDF change report, which is
 // downloaded directly. There is no on-screen diff view — the report is the
 // deliverable (suitable for a change package).
@@ -43,11 +43,11 @@ export default function DiffPanel({ onToast }) {
         <div className="grid cols-3" style={{ alignItems: 'end' }}>
           <div className="field">
             <label>Old (previous revision)</label>
-            <input ref={oldRef} type="file" accept=".xml,.json" />
+            <input ref={oldRef} type="file" accept=".yaml,.yml" />
           </div>
           <div className="field">
             <label>New (this revision)</label>
-            <input ref={newRef} type="file" accept=".xml,.json" />
+            <input ref={newRef} type="file" accept=".yaml,.yml" />
           </div>
           <button className="btn primary" disabled={busy} onClick={run}>
             {busy ? 'Building report…' : 'Download diff report (PDF)'}

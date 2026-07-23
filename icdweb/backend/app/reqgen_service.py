@@ -9,7 +9,7 @@ Responsibilities:
   * validate + save a posted draft (delegates to save_config, which enforces
     the bright-line placeholder rule and rejects bad configs),
   * generate a live requirements PREVIEW from a posted (unsaved) draft against a
-    chosen ICD — saved project or just-in-time uploaded XML — without writing,
+    chosen ICD — saved project or just-in-time uploaded YAML — without writing,
   * reconcile a draft's output against the SAVED config's output so the editor
     can show "what your edits change" before you commit,
   * build the requirements-to-signals TRACEABILITY MATRIX from a posted draft
@@ -95,12 +95,11 @@ def _model_from_project(project_id: str):
     return dto_to_model(dto)
 
 
-def _model_from_xml_text(xml_text: str):
-    """Parse uploaded XML/JSON text into an icdgen model via the real loader."""
-    suffix = ".json" if xml_text.lstrip().startswith("{") else ".xml"
-    with tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False,
+def _model_from_yaml_text(yaml_text: str):
+    """Parse uploaded YAML text into an icdgen model via the real loader."""
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False,
                                      encoding="utf-8") as fh:
-        fh.write(xml_text)
+        fh.write(yaml_text)
         tmp = fh.name
     try:
         model, _hash, _warns = load(tmp)
@@ -115,10 +114,10 @@ def _resolve_model(payload: dict):
     pid = payload.get("icdProjectId")
     if pid:
         return _model_from_project(pid), f"project:{pid}"
-    xml = payload.get("icdXml")
-    if xml:
-        return _model_from_xml_text(xml), "upload"
-    raise ValueError("no ICD source: provide icdProjectId or icdXml")
+    yaml_text = payload.get("icdYaml")
+    if yaml_text:
+        return _model_from_yaml_text(yaml_text), "upload"
+    raise ValueError("no ICD source: provide icdProjectId or icdYaml")
 
 
 # --------------------------------------------------------------------------
@@ -216,21 +215,21 @@ def trace_csv(payload: dict) -> tuple[str, str]:
     cfg = config_from_dict(payload.get("config") or {})   # raises ConfigError
 
     # Resolve the model AND its ICD hash. For an uploaded file we hash the
-    # uploaded text; for a saved project we hash the canonical serialized XML
+    # uploaded text; for a saved project we hash the canonical serialized YAML
     # (mirrors icd_service.generate()).
     import hashlib
-    from icdgen.serializer import to_xml
+    from icdgen.serializer import to_yaml
 
     pid = payload.get("icdProjectId")
-    xml = payload.get("icdXml")
+    yaml_text = payload.get("icdYaml")
     if pid:
         model = _model_from_project(pid)
-        icd_hash = hashlib.sha256(to_xml(model).encode("utf-8")).hexdigest()
-    elif xml:
-        model = _model_from_xml_text(xml)
-        icd_hash = hashlib.sha256(xml.encode("utf-8")).hexdigest()
+        icd_hash = hashlib.sha256(to_yaml(model).encode("utf-8")).hexdigest()
+    elif yaml_text:
+        model = _model_from_yaml_text(yaml_text)
+        icd_hash = hashlib.sha256(yaml_text.encode("utf-8")).hexdigest()
     else:
-        raise ValueError("no ICD source: provide icdProjectId or icdXml")
+        raise ValueError("no ICD source: provide icdProjectId or icdYaml")
 
     from reqgen.provenance import ReqProvenance
     prov = ReqProvenance.create(icd_hash, config_hash(cfg))

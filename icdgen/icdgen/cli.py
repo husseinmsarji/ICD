@@ -153,11 +153,12 @@ def cmd_diff(args) -> int:
 def _write_run_log(out_dir: str, input_path: str, prov: Provenance,
                    produced: list[str]) -> None:
     """Per-invocation provenance record. The ONLY place wall-clock time
-    appears. Records the full input set: ICD hash, schema (compiled XSD) hash,
+    appears. Records the full input set: ICD hash, the generated-schema hash,
     and every Jinja template's hash, so an overridden template
     ($ICDGEN_TEMPLATE_DIR) is an auditable input, never a silent substitution.
     """
-    from .resources import compiled_xsd_hash, template_dir, template_manifest
+    from .loader import schema_hash
+    from .resources import template_dir, template_manifest
     log_path = os.path.join(out_dir, "run.log")
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     lines = [
@@ -166,7 +167,7 @@ def _write_run_log(out_dir: str, input_path: str, prov: Provenance,
         f"input_file      : {os.path.abspath(input_path)}",
         f"input_sha256    : {prov.input_hash}",
         f"schema_version  : {prov.schema_version}",
-        f"compiled_xsd_sha256 : {compiled_xsd_hash()}",
+        f"schema_sha256   : {schema_hash()}",
         f"template_dir    : {os.path.abspath(template_dir())}",
         "templates:",
     ]
@@ -193,13 +194,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     pv = sub.add_parser("validate", help="Validate an input file.")
-    pv.add_argument("input", help="Input ICD definition (.xml or .json)")
+    pv.add_argument("input", help="Input ICD definition (.yaml)")
     pv.add_argument("--strict", action="store_true",
                     help="Treat warnings as fatal (release gate).")
     pv.set_defaults(func=cmd_validate)
 
     pg = sub.add_parser("generate", help="Generate artifacts.")
-    pg.add_argument("input", help="Input ICD definition (.xml or .json)")
+    pg.add_argument("input", help="Input ICD definition (.yaml)")
     pg.add_argument("-o", "--output", default="icd_out",
                     help="Output directory (default: ./icd_out)")
     pg.add_argument("-f", "--formats", nargs="+", choices=ALL_FORMATS,

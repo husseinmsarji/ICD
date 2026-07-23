@@ -29,7 +29,7 @@ from icdgen.diff import render_csv as diff_csv
 from icdgen.diff import render_text as diff_text
 from icdgen.loader import ValidationError, hash_file, load
 from icdgen.provenance import Provenance
-from icdgen.serializer import to_xml
+from icdgen.serializer import to_yaml
 
 from .schemas import IcdDTO, dto_to_model, model_to_dto
 
@@ -153,10 +153,10 @@ def validate_dto(dto: IcdDTO) -> tuple[list[ValidationIssue], list[ValidationIss
     warnings are non-fatal (e.g. missing type, non-C-identifier name).
     """
     model = dto_to_model(dto)
-    xml = to_xml(model)
-    with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False,
+    yaml_text = to_yaml(model)
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False,
                                      encoding="utf-8") as fh:
-        fh.write(xml)
+        fh.write(yaml_text)
         tmp = fh.name
     try:
         _model, _hash, warns = load(tmp)
@@ -198,12 +198,12 @@ def generate(project_id: str, formats: list[str],
                 "warnings": [w.__dict__ for w in warnings], "artifacts": []}
 
     model = dto_to_model(dto)
-    # Hash the canonical serialized XML so the stamp traces to exactly what was
+    # Hash the canonical serialized YAML so the stamp traces to exactly what was
     # generated from (the definition the user saved), independent of formatting.
-    xml = to_xml(model)
+    yaml_text = to_yaml(model)
     out = _out_dir(project_id)
-    src_path = os.path.join(out, f"{model.metadata.document_id}.source.xml")
-    _atomic_write(src_path, xml)
+    src_path = os.path.join(out, f"{model.metadata.document_id}.source.yaml")
+    _atomic_write(src_path, yaml_text)
     file_hash = hash_file(src_path)
     prov = Provenance.create(file_hash, model.schema_version)
 
@@ -219,7 +219,7 @@ def generate(project_id: str, formats: list[str],
         for rev, content in prior_files.items():
             if not content:
                 continue
-            fname = f".prior_{_safe_rev_token(rev)}.xml"
+            fname = f".prior_{_safe_rev_token(rev)}.yaml"
             ppath = os.path.join(out, fname)
             _atomic_write(ppath, content)
             prior_tmp_paths.append(ppath)
@@ -271,8 +271,8 @@ def diff(old: IcdDTO, new: IcdDTO) -> dict:
     old_m = dto_to_model(old)
     new_m = dto_to_model(new)
     res = diff_models(old_m, new_m)
-    old_hash = hash_file_text(to_xml(old_m))
-    new_hash = hash_file_text(to_xml(new_m))
+    old_hash = hash_file_text(to_yaml(old_m))
+    new_hash = hash_file_text(to_yaml(new_m))
     return {
         "hasChanges": res.has_changes,
         "text": diff_text(res, old_hash, new_hash),

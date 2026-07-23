@@ -47,8 +47,8 @@ export default function GeneratePanel({ projectId, definition, options, priorFil
       <div className="card-head">
         <h2>Generate Artifacts</h2>
         <span className="spacer" />
-        <a className="btn ghost sm" href={api.exportXmlUrl(projectId)} target="_blank" rel="noreferrer">
-          Export source XML
+        <a className="btn ghost sm" href={api.exportYamlUrl(projectId)} target="_blank" rel="noreferrer">
+          Export source YAML
         </a>
       </div>
       <div className="card-body">

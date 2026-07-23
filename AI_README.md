@@ -15,27 +15,34 @@
 
 ## 0. Status
 
-No open blocking issues. The two historical section-0 items are resolved:
+**The ICD definition format is YAML.** XML has been fully removed (loader, XSD,
+serializer, examples, tests, docs) — see section 9.8 for the migration record.
+There is no XSD anymore: validation is a JSON Schema generated from the field
+registry and applied to the parsed YAML. Determinism is preserved by a
+hand-rolled, byte-stable YAML emitter (`serializer.to_yaml`).
 
-- **XSD template single-sourcing** — resolved. The XSD template is one physical
-  file, package data at `icdgen/icdgen/schemas/icd-1.0.xsd.template`; it cannot
-  drift across layouts. See section 3 (Schema note).
-- **Stale test example references** — resolved. All three suites point at the
-  eVTOL examples (`icd_evtol_revA/B/C.xml`): `icdgen/tests/test_icdgen.py`
-  (EX_XML = revA, asserts 3 interfaces; diff-PDF tests use revB→revC),
+No open blocking issues. Prior section-0 items resolved:
+
+- **Test example references** — all three suites point at the eVTOL YAML
+  examples (`icd_evtol_revA/B/C.yaml`): `icdgen/tests/test_icdgen.py`
+  (EX = revA, asserts 3 interfaces; diff-PDF tests use revB→revC),
   `icdweb/backend/tests/test_api.py` (revA import; the Flow A prior-file test
   uses revC/revB and asserts `+vel_north` / `AVS-1101`), and
-  `reqgen/tests/test_reqgen.py` (revC/revB, 6 if / 9 pkt / 31 sig). NOTE: revC
-  has 9 packets (count corrected from a stale 8 in the prior test/README; the
-  example XML header comment still says 8 and should be fixed).
+  `reqgen/tests/test_reqgen.py` (revC/revB, 6 if / 9 pkt / 31 sig).
+- **Example header counts** — the YAML `#` headers state the true counts
+  (revB 16 signals, revC 9 packets / 31 signals).
+- **PR Ticket traceability column** — `gen_trace.py` now actually emits the
+  "PR Ticket" column (it was documented but never implemented before the YAML
+  migration; the registry recipe in section 12 was completed).
 
-Recently delivered (no version bump): a **granularity-aware L3 aspect model**
-(port/interface-contract aspects vs packet/message aspects, section 9.6), the
-reqgen applicability + traceability matrix and its **web UI** (download +
-on-screen coverage), the icdgen `--strict` release gate, the
-`ICDGEN_TEMPLATE_DIR` override with run.log provenance closure, the PR Ticket
-traceability column, the C-header/Simulink sanitizers, and the prior-file
-path-traversal guard. Details in sections 1, 9.6, 10, 15, 16.
+Recently delivered (no version bump): the **YAML migration** (section 9.8), a
+**granularity-aware L3 aspect model** (port/interface-contract aspects vs
+packet/message aspects, section 9.6), the reqgen applicability + traceability
+matrix and its **web UI** (download + on-screen coverage), the icdgen `--strict`
+release gate, the `ICDGEN_TEMPLATE_DIR` override with run.log provenance
+closure, the PR Ticket traceability column, the C-header/Simulink sanitizers,
+and the prior-file path-traversal guard. Details in sections 1, 9.6, 9.8, 10,
+15, 16.
 
 ---
 
@@ -46,8 +53,8 @@ path-traversal guard. Details in sections 1, 9.6, 10, 15, 16.
   artifacts (`provenance.TOOL_VERSION`). Bump it deliberately; it is independent
   of the project version and changing it changes artifact bytes (re-baseline).
 - **`reqgen` tool version:** 0.1.0 (`reqgen.provenance.TOOL_VERSION`).
-- **Schema version:** 1.0 — XML namespace `urn:icdgen:icd:1.0`, `schemaVersion`
-  attribute pinned to `1.x`.
+- **Schema version:** 1.0 — the `schemaVersion` key is pinned to `1.x`. (The
+  old XML namespace `urn:icdgen:icd:1.0` is gone with XML; the format is YAML.)
 
 ### History
 - **1.0.0** — initial CLI tool + web app.
@@ -75,14 +82,17 @@ path-traversal guard. Details in sections 1, 9.6, 10, 15, 16.
   (`gen_diff_pdf.py`, CLI `diff -o`, web `POST /api/diff-report`) (Flow B).
   Details in section 9.5.
 - **Post-1.6.0 work (no version bump):**
+  * **YAML migration (section 9.8):** the ICD definition format is now YAML;
+    XML/XSD/lxml fully removed. Validation is a JSON Schema generated from the
+    field registry; a hand-rolled `serializer.to_yaml` preserves byte
+    determinism. `PyYAML` replaces `lxml` in the pinned deps.
   * **reqgen** added as a separate sibling tool (section 15).
-  * Demo examples replaced with three revisions of one ICD,
-    `ICD-EVTOL-AVS-200` (`icd_evtol_revA/B/C.xml`); old `icd_demo*` /
-    `icd_example` files removed.
-  * Schema single-sourcing fix — applied.
+  * Demo examples are three revisions of one ICD, `ICD-EVTOL-AVS-200`
+    (`icd_evtol_revA/B/C.yaml`); old `icd_demo*` / `icd_example` files removed.
   * **icdgen release gate:** `--strict` on `validate`/`generate` turns warnings
-    fatal; run.log records the compiled-XSD hash, the template dir, and a
-    per-template hash manifest (`ICDGEN_TEMPLATE_DIR` override is auditable).
+    fatal; run.log records the generated-schema hash (`schema_sha256`), the
+    template dir, and a per-template hash manifest (`ICDGEN_TEMPLATE_DIR`
+    override is auditable).
   * **Traceability matrix gains a PR Ticket column** (`gen_trace.py`).
   * **C-header macro sanitization + Simulink quote escaping** in `gen_code.py`.
   * **reqgen applicability + traceability matrix** (`config_schema.AspectSpec.
@@ -107,7 +117,7 @@ path-traversal guard. Details in sections 1, 9.6, 10, 15, 16.
 Three pieces sharing one core library:
 
 1. **`icdgen/`** — the core Python library + CLI. Takes a single
-   schema-validated XML/JSON ICD definition and deterministically generates: a
+   schema-validated YAML ICD definition and deterministically generates: a
    Word ICD (`.docx`), a PDF ICD, a C header (MISRA C:2012-oriented), a Simulink
    bus script (`.m`), a traceability matrix (`.csv` + `.xlsx`), a version diff
    report (text/CSV/PDF). pip-installable and PyInstaller-packageable.
@@ -140,35 +150,38 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 ├── icdgen/                       ← CORE library + CLI (pip-installable)
 │   ├── pyproject.toml            packaging; EXACT-pinned runtime deps
 │   ├── requirements.txt
-│   ├── icdgen.spec               PyInstaller build spec (bundles the package
-│   │                             copy of the XSD template)
+│   ├── icdgen.spec               PyInstaller build spec (bundles the Jinja
+│   │                             templates; no schema file to bundle)
 │   ├── run.py / pyi_rth_docx.py  PyInstaller entry + runtime hook
 │   ├── README.md                 (stale v1.2.0-era paths; see section 14)
 │   ├── examples/
-│   │   ├── icd_evtol_revA.xml          initial release (3 if / 3 pkt / 9 sig)
-│   │   ├── icd_evtol_revB.xml          adds AHRS bus (4 if / 5 pkt / 16 sig);
-│   │   │                               links revA  (XML comment says 18 — wrong)
-│   │   └── icd_evtol_revC.xml      ★   current (6 if / 9 pkt / 31 sig); links
-│   │                                   revB  (XML comment says 8 pkt / 33 sig
-│   │                                   — both wrong; actual 9 pkt / 31 sig)
-│   ├── tests/test_icdgen.py            targets the eVTOL examples
+│   │   ├── icd_evtol_revA.yaml         initial release (3 if / 3 pkt / 9 sig)
+│   │   ├── icd_evtol_revB.yaml         adds AHRS bus (4 if / 5 pkt / 16 sig);
+│   │   │                               links revA
+│   │   └── icd_evtol_revC.yaml     ★   current (6 if / 9 pkt / 31 sig); links
+│   │                                   revB
+│   ├── tests/test_icdgen.py            targets the eVTOL YAML examples
 │   └── icdgen/                   ← the importable package
 │       ├── __init__.py / __main__.py
 │       ├── cli.py                argparse CLI: validate | generate | diff;
 │       │                         --strict gate; run.log provenance closure
 │       ├── fields.py        ★    SINGLE SOURCE OF TRUTH: SIGNAL_FIELDS +
 │       │                         INTERFACE_FIELDS + data-type catalog + enums
-│       ├── schema_gen.py    ★    derives XSD + JSON Schema from the registries
-│       ├── signal_codec.py  ★    registry-driven Signal/Interface codecs +
+│       │                         (json_name = YAML key; emit_if drives output)
+│       ├── schema_gen.py    ★    derives the JSON Schema from the registries
+│       ├── signal_codec.py  ★    registry-driven Signal/Interface codecs
+│       │                         (json-dict API shape + minimal yaml-dict) +
 │       │                         structural Packet codec
 │       ├── model.py              frozen dataclasses incl. PriorRevision
-│       ├── loader.py             validate + parse -> IcdModel; WARNINGS channel;
-│       │                         parses <priorRevisions>
-│       ├── serializer.py         IcdModel -> canonical XML (emits priorRevisions)
+│       ├── loader.py             parse YAML + JSON-Schema validate -> IcdModel;
+│       │                         WARNINGS channel; parses priorRevisions;
+│       │                         schema_hash() for provenance
+│       ├── serializer.py         IcdModel -> canonical YAML (hand-rolled,
+│       │                         byte-stable emitter; emits priorRevisions)
 │       ├── provenance.py         tool/version/hash stamp (timestamp-free)
-│       ├── resources.py          schema template + Jinja dir resolution;
-│       │                         ICDGEN_TEMPLATE_DIR override; compiled_xsd_hash
-│       │                         + template_manifest for run.log provenance
+│       ├── resources.py          Jinja template dir resolution;
+│       │                         ICDGEN_TEMPLATE_DIR override + template_manifest
+│       │                         for run.log provenance
 │       ├── gen_code.py           C header + Simulink .m (Jinja2); MISRA helpers;
 │       │                         macro-name sanitizer + Simulink quote escape
 │       ├── gen_docx.py           DOCX ICD; landscape; revision table has the
@@ -179,8 +192,6 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 │       ├── rev_summary.py   ★    per-revision change summaries (Flow A)
 │       ├── diff.py               version diff engine + text/CSV reports
 │       ├── ooxml_determinism.py  ZIP-normalizes .docx/.xlsx
-│       ├── schemas/icd-1.0.xsd.template  ★ THE one XSD template (package data,
-│       │                                  single source — cannot drift)
 │       └── templates/header.h.j2, simulink_bus.m.j2
 │
 ├── icdweb/                       ← WEB app (FastAPI + React)
@@ -230,12 +241,10 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
         └── provenance.py         dual-hash (ICD + config) stamp
 ```
 
-> **Schema note.** The full XSD is assembled in memory at load time from the
-> template + both registries (`resources.compiled_xsd()`); it cannot drift from
-> the registries. The template itself exists as exactly ONE physical file
-> (package data at `icdgen/icdgen/schemas/icd-1.0.xsd.template`), so it cannot
-> drift across layouts either — one copy serves source checkouts, pip wheels,
-> and PyInstaller bundles.
+> **Schema note.** There is no on-disk schema file. The JSON Schema is generated
+> in memory at load time from both registries (`schema_gen.json_*`, assembled by
+> `loader._data_schema()`) and applied to the parsed YAML, so it cannot drift
+> from the registries. `loader.schema_hash()` records its SHA-256 in run.log.
 > **Filename casing:** `App.jsx` imports `./DiffPanel.jsx` (capital P); the file
 > must be committed with that exact casing or the Linux Docker build fails to
 > resolve the import (case-insensitive Windows/macOS hide this).
@@ -248,29 +257,31 @@ files that own the new reqgen UI state and trace matrix.
 ## 4. The field registry (the heart of maintainability)
 
 **File: `icdgen/icdgen/fields.py`.** Every signal AND interface field is declared
-once as a `FieldSpec`. The XSD, JSON Schema, form column/input, API descriptor,
-XML/JSON serialization, parsing, CSV/XLSX columns, AND DOCX/PDF tables are all
-derived from it.
+once as a `FieldSpec`. The JSON Schema, form column/input, API descriptor, YAML
+serialization/parsing, CSV/XLSX columns, AND DOCX/PDF tables are all derived
+from it.
 
 - **Data-type catalog:** `DataTypeSpec` + `DATA_TYPES` (incl. `"enum"` ->
   C `int32_t`); derived `DATA_TYPE_NAMES`, `C_TYPE_MAP`, `SIMULINK_TYPE_MAP`.
 - **Interface lists:** `BUS_TYPES` (suggestions only — freeform), `DAL_LEVELS`
   (enforced enum), `DIRECTIONS` (namespace stability).
-- **`FieldSpec`:** name/xml_name/json_name/label, `py_type`, `xml_location`,
-  `required`, `default`, `enum`/`enum_source`; validation hints `positive`,
-  `min_inclusive`, `pattern`, `min_length`; UI hints `ui_width`, `ui_numeric`,
-  `suggestions`; serialization `emit_if`.
-- **SIGNAL_FIELDS order (= column order everywhere):** name, description,
-  signal_type, update_rate_hz, units, data_bits, xmit_bits, xmit_bytes, scaling,
-  definition, range_min, range_max, offset, **pr_ticket** (1.6.0, appended).
+- **`FieldSpec`:** name/`json_name`/label, `py_type`, `required`, `default`,
+  `enum`/`enum_source`; validation hints `positive`, `min_inclusive`, `pattern`,
+  `min_length`; UI hints `ui_width`, `ui_numeric`, `suggestions`; serialization
+  `emit_if`. **`json_name` is both the API (JSON-over-HTTP) key AND the YAML
+  key.** (There is no `xml_name`/`xml_location` anymore.)
+- **SIGNAL_FIELDS order (= column order everywhere, incl. canonical YAML key
+  order):** name, description, signal_type, update_rate_hz, units, data_bits,
+  xmit_bits, xmit_bytes, scaling, definition, range_min, range_max, offset,
+  **pr_ticket** (1.6.0, appended).
 - **INTERFACE_FIELDS:** id, bus_type, dal, name, source_lru, destination_lru,
-  owning_document, description. `<packets>` is structural, not in the registry.
+  owning_document, description. `packets` is structural, not in the registry.
 - **Descriptors** (`signal_fields_descriptor()` / `interface_fields_descriptor()`)
   feed `/api/meta/options`; the React form builds itself from them.
 
-**Schema derivation — `schema_gen.py`:** generic over a registry + prefix
-(`Sig`/`If`). Optional enum fields also accept `""`; pattern values are emitted
-via `quoteattr()` so a quote-containing regex can't break the XSD.
+**Schema derivation — `schema_gen.py`:** `json_signal_schema()` /
+`json_interface_schema()` build the per-object JSON Schema from the registry.
+Optional enum fields also accept `""`; string patterns are wrapped `^...$`.
 
 ---
 
@@ -292,30 +303,38 @@ via `quoteattr()` so a quote-containing regex can't break the XSD.
 ## 6. Codecs — `signal_codec.py`
 
 Registry-driven movement (`_coerce` -> None becomes `spec.default`, so optional
-numerics arrive as `None`). Signal/Interface/Packet to-from XML/JSON/dict.
-`serializer.to_xml(model)` is the inverse of the loader and the single source of
-truth for the wire format; it emits `<priorRevisions>` when present.
+numerics arrive as `None`). Two dict shapes, both keyed by `json_name`:
+`*_to_json_dict`/`*_from_json_dict` (the LOOSE, all-fields API DTO shape) and
+`*_to_yaml_dict` (the MINIMAL, ordered canonical shape with blank optionals
+dropped via `emit_if`). `serializer.to_yaml(model)` is the inverse of the loader
+and the single source of truth for the wire format; it hand-rolls a byte-stable
+block-YAML emitter (every string double-quoted/escaped; numbers via `_num`;
+`emit_if` drops blanks) and emits `priorRevisions` when present.
 
 ---
 
 ## 7. Loading & validation — `loader.py`
 
-- **FATAL** -> `ValidationError(message, line, source)`: XML/JSON syntax, XSD/
-  jsonschema violation, unsupported schemaVersion, duplicate id/packet/signal,
-  `rangeMin > rangeMax` (when both present).
+- Input is YAML, parsed with PyYAML `safe_load`, then validated against the
+  generated JSON Schema (`_data_schema()`).
+- **FATAL** -> `ValidationError(message, line, source)`: YAML syntax, JSON
+  Schema violation, unsupported schemaVersion, duplicate id/packet/signal,
+  `rangeMin > rangeMax` (when both present). `_approx_line` best-effort maps a
+  schema error to the source `key:` line.
 - **NON-FATAL** -> `list[ValidationWarning]`: blank `signal_type`; signal name
   not a valid C identifier; **missing `pr_ticket` on a signal when the ICD
   revision is not "A"** (change-control reminder). NOTE: carried-over signals
   legitimately have no ticket, so these warnings are expected on revB/revC.
 - `load(path) -> (IcdModel, sha256_hex, list[ValidationWarning])` (3-tuple).
-- Parses `<priorRevisions>` (XML + JSON).
+- Parses `priorRevisions`. `schema_hash()` = SHA-256 of the canonical JSON of
+  the generated schema (run.log provenance).
 
 ---
 
 ## 8. Data flow
 
 Web authoring -> DTO -> save; debounced validate -> `(errors, warnings)`.
-Generate -> serialize to canonical `*.source.xml` -> hash -> `Provenance` ->
+Generate -> serialize to canonical `*.source.yaml` -> hash -> `Provenance` ->
 `ARTIFACT_BUILDERS`. CLI mirrors the same core. Generators iterate
 `model.all_signals()`; C header/Simulink emit one struct/Bus per PACKET;
 DOCX/PDF render the signal table per packet plus the revision table with the
@@ -337,9 +356,11 @@ DTOs are intentionally loose; only `Dal` stays a `Literal`. `load()` is a 3-tupl
 ## 9.5. What 1.6.0 changed (change control + diff reporting)
 
 ### Flow A — per-revision Change Summary Report (inside the ICD document)
-- `<priorRevisions>` block maps `revision -> source` file:
-  ```xml
-  <priorRevisions><priorRevision revision="B" source="icd_evtol_revB.xml"/></priorRevisions>
+- `priorRevisions` block maps `revision -> source` file:
+  ```yaml
+  priorRevisions:
+    - revision: "B"
+      source: "icd_evtol_revB.yaml"
   ```
 - `rev_summary.compute_revision_summaries(model, base_dir, mode="pr")` runs the
   diff engine against each linked prior source. Rev A -> "Initial release"; a
@@ -361,7 +382,7 @@ DTOs are intentionally loose; only `Dal` stays a `Literal`. `load()` is a 3-tupl
   deletes the temp files.
 
 ### Per-signal `pr_ticket`
-- New last signal field (`<prTicket>` / `prTicket`, label "PR Ticket"); freeform;
+- New last signal field (`prTicket`, label "PR Ticket"); freeform;
   appended so all derived outputs (incl. the traceability matrix "PR Ticket"
   column) pick it up. Optional. Non-fatal warning when missing on a post-Rev-A
   ICD (gate is `revision not in {"", "A"}`, case-insensitive).
@@ -460,13 +481,49 @@ matrix**, produced by `reqgen/reqgen/trace.py` and surfaced everywhere:
   skipped element then shows as a trace-matrix gap. This is what makes the trace
   matrix the completeness artifact rather than a rubber stamp.
 
+## 9.8. YAML migration (XML fully removed)
+
+The ICD definition format is **YAML**; XML/XSD/lxml were removed entirely
+(Scope C — full replacement, not a parallel format). The migration was cheap
+because the system was already format-abstracted: the JSON Schema is generated
+from the field registry and validates the parsed structure regardless of
+surface syntax, and the domain model is format-neutral. Full plan/record:
+`MIGRATION_YAML.md` at the repo root.
+
+What changed:
+- **Parse:** `loader` uses PyYAML `safe_load`, then validates against the
+  registry-generated JSON Schema (`_data_schema()`). No XSD, no `lxml`.
+- **Serialize:** `serializer.to_yaml` replaces `to_xml`. The emitter is
+  **hand-rolled** (not PyYAML's dumper) so output bytes are fully controlled —
+  the determinism contract (section 11) demands it. Key order is registry order,
+  indentation is 2 spaces, every string scalar is double-quoted+escaped (which
+  also stops YAML coercing `2026-06-01` into a native date on re-parse), numbers
+  reuse `_num`, and `emit_if` drops blank optionals so canonical YAML is minimal.
+- **Codecs:** the XML parse/emit functions are gone; `*_to_yaml_dict` builders
+  produce the minimal ordered dict the serializer emits. The `*_json_dict`
+  functions stay (the web API is genuinely JSON over HTTP).
+- **Provenance:** run.log records `schema_sha256` (the generated JSON Schema)
+  instead of `compiled_xsd_sha256`.
+- **Web/CLI/reqgen:** `export.yaml` (was `export.xml`); `*.source.yaml`; import
+  and diff accept YAML; reqgen upload payload key is `icdYaml`; all help text
+  and file-picker `accept` are `.yaml`/`.yml`.
+- **Deps:** `PyYAML==6.0.1` replaces `lxml==6.0.2` (EXACT-pinned like the rest).
+- **Examples:** `icd_evtol_revA/B/C.yaml` (byte-identical to canonical
+  `to_yaml`, plus a `#` header). Verified: load→to_yaml is idempotent, and
+  generate-twice is byte-identical across all six artifacts.
+- **One intentional relaxation:** dates validate as strings (the XSD validated
+  `xs:date`). This matches the pre-existing JSON-input behavior.
+
+The `IcdModel`, all generators, and every artifact's bytes are unchanged by the
+format switch (the generators never saw the file, only the model).
+
 ---
 
 ## 10. The web layer
 
 `main.py` routes: health; `/api/meta/options`; projects CRUD; `/validate`;
 `/generate` (accepts optional `priorFiles: {rev: text}` for Flow A); artifact
-download; `export.xml`; `/import`; `/diff` (JSON); `/diff-files` (JSON);
+download; `export.yaml`; `/import`; `/diff` (JSON); `/diff-files` (JSON);
 `/diff-report` (PDF download); and the reqgen editor routes — `/api/reqgen/meta`,
 `/api/reqgen/config` (GET/PUT), `/api/reqgen/preview`, `/api/reqgen/trace`,
 `/api/reqgen/trace.csv`, `/api/reqgen/reconcile`. `schemas.py` DTOs incl.
@@ -495,35 +552,43 @@ flips to the ICD Editor and back:
 ## 11. Determinism contract (must never regress)
 
 Identical input => byte-identical artifacts. No timestamps in artifacts
-(`run.log` is the only wall-clock place). PDF: `rl_config.invariant=1` (covers
-the ICD PDF AND the diff PDF). OOXML: pinned epoch + ZIP normalization. Registry
-order fixes column order. The reqgen CSV exports and the trace matrix are
-deterministic (document order, no timestamps, dual-hash provenance per row).
-Guard tests + determinism tests in `tests/test_icdgen.py`. Re-verify the byte
-baseline after any core change.
+(`run.log` is the only wall-clock place). **The canonical YAML serializer is
+part of this contract:** `serializer.to_yaml` is hand-rolled precisely so its
+bytes are stable and not at the mercy of a third-party YAML dumper's version or
+formatting rules (this is why we did NOT use `yaml.dump` for output). PDF:
+`rl_config.invariant=1` (covers the ICD PDF AND the diff PDF). OOXML: pinned
+epoch + ZIP normalization. Registry order fixes column order AND canonical YAML
+key order. The reqgen CSV exports and the trace matrix are deterministic
+(document order, no timestamps, dual-hash provenance per row). Guard tests +
+determinism tests in `tests/test_icdgen.py` (incl.
+`test_yaml_serialization_is_deterministic_and_dates_are_strings`). Re-verify the
+byte baseline after any core change.
 
-**Re-baseline note:** the PR Ticket column changed the trace-csv / trace-xlsx
-artifact bytes relative to pre-PR-Ticket baselines. The C-header sanitizer and
-the Simulink quote escape are no-ops on clean names (current examples), so those
-bytes are unchanged — but re-verify across all artifacts after merging.
+**Re-baseline note:** the PR Ticket column added a trace-csv / trace-xlsx column
+(and the value is now emitted), changing those artifact bytes; the YAML
+migration changed the `*.source.yaml` sidecar and the canonical-serialization
+hashes but NOT any generated artifact's bytes (the generators consume the model,
+not the file). Re-verify across all artifacts after merging.
 
 ---
 
 ## 12. How to make common changes (recipes)
 
 - **New SIGNAL field:** one `FieldSpec` in `fields.py` (append) + one attr in
-  `model.py`. Flows to schema, codec, UI, traceability, DOCX/PDF tables. The
-  traceability matrix uses an explicit column list in `gen_trace.py`, so add the
-  column there too. C-header macros are human-curated in `header.h.j2`.
+  `model.py`. Flows to the JSON Schema, the codecs, the canonical YAML, the UI,
+  and DOCX/PDF tables. The traceability matrix uses an explicit column list in
+  `gen_trace.py`, so add the column there too (add both the `_HEADERS` entry AND
+  the value in `_rows`). C-header macros are human-curated in `header.h.j2`.
 - **New DATA TYPE:** one `DataTypeSpec` in `fields.py` (+ `_UNSIGNED_TYPES`/
   `_LONGLONG_TYPES` in `gen_code.py` if needed).
 - **New ARTIFACT format:** generator in `icdgen/` + one entry in
   `service.ARTIFACT_BUILDERS` + `_write_*` shim; for the CLI add to
   `cli.ALL_FORMATS` + a branch in `cmd_generate`.
 - **New INTERFACE field:** one `FieldSpec` + one `Interface` attr (+ DTO type if
-  strict). Keep `<packets>` structural.
-- **PACKET fields:** edit `PacketType` (XSD template), `loader._json_schema`,
-  `Packet`, the packet codec fns, `PacketDTO`, `PacketEditor.jsx`.
+  strict). Keep `packets` structural.
+- **PACKET fields:** edit the packet sub-schema in `loader._data_schema`,
+  `Packet`, the packet codec fns (`packet_to_json_dict`/`packet_to_yaml_dict`/
+  `packet_from_json_dict`), `PacketDTO`, `PacketEditor.jsx`.
 - **New VALIDATION rule:** schema-expressible -> a `FieldSpec` facet; cross-field
   -> `loader._semantic_checks` (raise for fatal, append `ValidationWarning` for
   non-fatal).
@@ -534,9 +599,9 @@ bytes are unchanged — but re-verify across all artifacts after merging.
   is fatal and nothing ships with open warnings.
 - **Change the revision summary wording / grouping:** `rev_summary.py`.
 - **Restyle the diff PDF:** `gen_diff_pdf.py` (one file, self-contained).
-- **New schema version:** add `icd-1.1.xsd.template` beside the 1.0 one (inside
-  the package `schemas/` dir), register in `loader.SUPPORTED_SCHEMA_VERSIONS`,
-  keep 1.0 working.
+- **New schema version:** extend `loader._data_schema()` (the generated JSON
+  Schema) to accept the new `1.1` shape, register `1.1` in
+  `loader.SUPPORTED_SCHEMA_VERSIONS`, keep `1.0` working.
 - **New API endpoint:** `service.py` (or `reqgen_service.py`) fn + thin `main.py`
   route + `api.js` method.
 - **New reqgen aspect:** one `AspectSpec` in `reqgen/config_schema.py`; set
@@ -551,13 +616,13 @@ bytes are unchanged — but re-verify across all artifacts after merging.
 ## 13. Build / run / test quick reference
 
 - **Install (core):** `pip install -e ./icdgen`
-- **Core tests:** `cd icdgen && python -m pytest tests/ -q`
-  (targets the eVTOL examples; `test_pr_ticket_in_traceability` checks the PR
-  Ticket column.)
+- **Core tests (38):** `cd icdgen && python -m pytest tests/ -q`
+  (targets the eVTOL YAML examples; `test_pr_ticket_in_traceability` checks the
+  PR Ticket column; the YAML determinism test guards the emitter.)
 - **Backend tests (9):**
   `cd icdweb/backend && ICDGEN_DATA_DIR=/tmp/t python -m pytest tests/ -q`
   (includes `test_prior_file_revision_key_cannot_escape_output_dir`.)
-- **reqgen tests (~22):**
+- **reqgen tests (25):**
   `cd icdgen && PYTHONPATH=../reqgen python -m pytest ../reqgen/tests/ -q`
   (includes the applicability test, the L3 port/packet granularity tests,
   and the trace-matrix tests.)
@@ -565,15 +630,15 @@ bytes are unchanged — but re-verify across all artifacts after merging.
 - **Docker (from repo root):**
   `docker compose -f icdweb/docker-compose.yml up --build` -> http://localhost:8000
 - **CLI (icdgen):**
-  - `python -m icdgen validate examples/icd_evtol_revC.xml [--strict]`
-  - `python -m icdgen generate examples/icd_evtol_revC.xml -o out [--strict]`
-  - `python -m icdgen diff examples/icd_evtol_revB.xml examples/icd_evtol_revC.xml -o out`
+  - `python -m icdgen validate examples/icd_evtol_revC.yaml [--strict]`
+  - `python -m icdgen generate examples/icd_evtol_revC.yaml -o out [--strict]`
+  - `python -m icdgen diff examples/icd_evtol_revB.yaml examples/icd_evtol_revC.yaml -o out`
 - **CLI (reqgen):** `reqgen init` then
-  `reqgen generate icdgen/examples/icd_evtol_revC.xml -o out` then
-  `reqgen trace icdgen/examples/icd_evtol_revC.xml -o out` then
-  `reqgen reconcile icdgen/examples/icd_evtol_revC.xml out/ICD-EVTOL-AVS-200_requirements.csv`
+  `reqgen generate icdgen/examples/icd_evtol_revC.yaml -o out` then
+  `reqgen trace icdgen/examples/icd_evtol_revC.yaml -o out` then
+  `reqgen reconcile icdgen/examples/icd_evtol_revC.yaml out/ICD-EVTOL-AVS-200_requirements.csv`
 - **Determinism check:** generate twice, compare SHA-256 of all artifacts (skip
-  `run.log`). Re-baseline the trace artifacts after the PR Ticket change.
+  `run.log`) — verified byte-identical post-migration.
 
 ### Backend env vars
 `ICDGEN_DATA_DIR` (`/data`), `ICDGEN_STATIC_DIR` (`/app/static`),
@@ -605,19 +670,20 @@ Jinja override), `REQGEN_CONFIG` (optional config-of-record path).
   source of state.
 - **Hash-semantics inconsistency (flagged, not changed):** CLI `diff` hashes raw
   input bytes; web `/api/diff-report` and `service.generate` hash canonical
-  serialized XML. Pick one policy and document it before relying on cross-path
-  hash equality.
+  serialized YAML. Pick one policy and document it before relying on cross-path
+  hash equality. (The migration preserved this asymmetry rather than changing
+  behavior mid-flight.)
 - **diff move detection:** a moved signal reports as removed+added (no rename
   detection yet).
 - **`diff.py` pr_ticket-only modifications:** counted in the Flow B PDF while
   Flow A's summary suppresses them; a shared policy flag would unify them.
-- **Example XML header comments overstate counts** (revB comment says 18 sigs,
-  actual 16; revC says 33, actual 31) — fix the comments; the code counts are
-  correct.
+- **Example headers** (`#` comment blocks in the YAML) state the true counts;
+  keep them in sync when editing an example.
 - **`TESTING.md` and `icdgen/README.md` are frozen at v1.2.0-era content**
-  (icd_demo paths, wrong counts, `schemas/icd-1.0.xsd` path) — rewrite.
-- **JSON date parity:** XML validates `revisionDate`/`date` as `xs:date`; the
-  JSON path accepts any string.
+  (icd_demo paths, wrong counts, XML/`schemas/icd-1.0.xsd` references) — rewrite.
+- **Date parity:** the JSON Schema validates `revisionDate`/`date` as plain
+  strings (the removed XSD validated `xs:date`). Intentional relaxation, carried
+  over from the pre-migration JSON-input path.
 - **`gen_pdf._REL_WIDTH`** has no `pr_ticket` entry (silently defaults 1.0);
   consider moving rel-width onto `FieldSpec` as `doc_rel_width`.
 
@@ -684,9 +750,9 @@ matrix, and a reconciliation report. Never writes to the ICD.
    to the qualification Tool Operational Requirements.
 5. **ReqIF / tool-specific reqgen exporter** — blocked on naming the target RM
    tool (DOORS / Jama / Polarion / etc.).
-6. **Fix the doc debt:** rewrite `TESTING.md` and `icdgen/README.md`; correct
-   the revB/revC example XML header comment counts (16 and 31).
-7. **Unify the hash-semantics policy** (raw bytes vs canonical XML) across the
+6. **Fix the remaining doc debt:** rewrite `TESTING.md` and `icdgen/README.md`
+   (still v1.2.0-era: icd_demo paths, wrong counts, XML/XSD references).
+7. **Unify the hash-semantics policy** (raw bytes vs canonical YAML) across the
    CLI diff and the web paths, and document it.
 8. **Optional:** fold the template-set hash into `Provenance.footer_line()` at
    the next major re-baseline (tri-hash stamp, symmetric with reqgen's dual

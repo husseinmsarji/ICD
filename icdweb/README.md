@@ -2,7 +2,7 @@
 
 A form-based web editor for ICD interface definitions, built on top of the
 `icdgen` core library. Author interfaces and signals in a UI (no hand-writing
-XML), validate live against the schema, and generate all artifacts — ICD
+YAML), validate live against the schema, and generate all artifacts — ICD
 documents (DOCX/PDF), C/C++ headers, Simulink bus scripts, and traceability
 matrices — with one click.
 
@@ -26,7 +26,7 @@ FastAPI backend  ── service layer ──►  icdgen core library
   validate/generate/diff and persists projects; `main.py` is just routing.
 - **Frontend (`icdweb/frontend/`)** is React. The form editor builds the same
   canonical model the validator expects, then round-trips it through the
-  identical XSD/jsonschema gate via the new `icdgen.serializer`. A hand-authored
+  identical JSON Schema gate via `icdgen.serializer` (YAML). A hand-authored
   file and a form-built one are validated by exactly the same code.
 
 ### Why this scales to 50–100 users later
@@ -71,15 +71,15 @@ Docker/production build, the backend serves the built frontend on a single port.
 
 ## Using the editor
 
-1. **New** creates an empty ICD, or **Import XML / JSON** loads an existing
+1. **New** creates an empty ICD, or **Import YAML** loads an existing
    definition into an editable project.
 2. Edit document metadata, add interfaces, and fill the signal tables. The
    status bar shows live schema validity (debounced) and an unsaved indicator.
 3. **Save** persists the definition.
 4. In **Generate Artifacts**, choose formats and generate. Download links
    appear, each artifact stamped with the input SHA-256 and tool version. The
-   source XML the artifacts were generated from is also downloadable
-   ("Export source XML").
+   source YAML the artifacts were generated from is also downloadable
+   ("Export source YAML").
 
 ## API surface
 
@@ -92,8 +92,8 @@ Docker/production build, the backend serves the built frontend on a single port.
 | POST | `/api/projects/{id}/validate` | validate (line-referenced errors) |
 | POST | `/api/projects/{id}/generate` | generate selected artifacts |
 | GET | `/api/projects/{id}/artifacts/{file}` | download an artifact |
-| GET | `/api/projects/{id}/export.xml` | canonical source XML |
-| POST | `/api/import` | parse uploaded XML/JSON into a definition |
+| GET | `/api/projects/{id}/export.yaml` | canonical source YAML |
+| POST | `/api/import` | parse uploaded YAML into a definition |
 | POST | `/api/diff` | diff two definitions |
 
 ## Adding a new feature
@@ -101,10 +101,11 @@ Docker/production build, the backend serves the built frontend on a single port.
 - **New artifact format**: add the generator in `icdgen/`, then one line in
   `service.ARTIFACT_BUILDERS`. The API and the UI's format checklist pick it up
   automatically (the frontend reads the list from `/api/meta/options`).
-- **New signal field**: add it to the XSD + jsonschema + `serializer.py`, the
+- **New signal field**: add one `FieldSpec` to `icdgen/fields.py` (the JSON
+  Schema, the YAML serializer, and the form all derive from it), one attr on the
   `Signal` dataclass, the `SignalDTO`, and one column in
   `frontend/src/SignalTable.jsx`. The editor and validator stay in lockstep.
-- **New schema version**: the namespace is versioned; add a `1.1` XSD and
+- **New schema version**: `schemaVersion` is pinned; add the `1.1` rules and
   register it in `loader.SUPPORTED_SCHEMA_VERSIONS`.
 
 ## Environment variables

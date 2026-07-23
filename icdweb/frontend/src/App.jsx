@@ -34,7 +34,7 @@ export default function App() {
     savedHash: null,       // hash of the config of record
     path: '',
     icdProjectId: '',      // chosen ICD source (saved project)
-    uploadXml: null,       // {text, name} chosen ICD source (uploaded file)
+    uploadYaml: null,      // {text, name} chosen ICD source (uploaded file)
     preview: null,         // last requirements preview
     recon: null,           // last reconcile result
     trace: null,           // last traceability matrix {rows, summary, documentId}
@@ -118,7 +118,7 @@ export default function App() {
     try {
       const r = await api.importFile(file);
       if (!r.ok) { showToast(r.issues?.[0]?.message || 'Import failed', true); return; }
-      const meta = await api.createProject(file.name.replace(/\.(xml|json)$/i, ''), r.definition);
+      const meta = await api.createProject(file.name.replace(/\.(yaml|yml)$/i, ''), r.definition);
       await refreshProjects();
       openProject(meta.id);
       showToast('Imported & created project');
@@ -191,9 +191,9 @@ export default function App() {
         </div>
         <div style={{ padding: '0 16px 10px' }}>
           <button className="btn ghost sm" style={{ width: '100%' }} onClick={() => fileRef.current.click()}>
-            Import XML / JSON
+            Import YAML
           </button>
-          <input ref={fileRef} type="file" accept=".xml,.json" style={{ display: 'none' }} onChange={onImport} />
+          <input ref={fileRef} type="file" accept=".yaml,.yml" style={{ display: 'none' }} onChange={onImport} />
         </div>
         {projects.map((p) => (
           <div key={p.id} className={`proj ${p.id === activeId && view === 'editor' ? 'active' : ''}`} onClick={() => openProject(p.id)}>

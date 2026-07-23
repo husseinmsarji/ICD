@@ -21,7 +21,7 @@ _HEADERS = [
     "Signal", "Packet", "Interface ID", "Interface Name", "Bus Type", "DAL",
     "Source LRU", "Destination LRU", "Owning Document",
     "Signal Type", "Units", "Range Min", "Range Max", "Update Rate (Hz)",
-    "Data Bits", "Xmit Bits", "Xmit Bytes", "Scale", "Offset",
+    "Data Bits", "Xmit Bits", "Xmit Bytes", "Scale", "Offset", "PR Ticket",
     "Input SHA-256",
 ]
 
@@ -39,7 +39,7 @@ def _rows(model: IcdModel, prov: Provenance):
             sig.signal_type, sig.units,
             _b(sig.range_min), _b(sig.range_max), _b(sig.update_rate_hz),
             _b(sig.data_bits), _b(sig.xmit_bits), _b(sig.xmit_bytes),
-            sig.scaling, sig.offset, prov.input_hash,
+            sig.scaling, sig.offset, _b(sig.pr_ticket), prov.input_hash,
         ]
 
 

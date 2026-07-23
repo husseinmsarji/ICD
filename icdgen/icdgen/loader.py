@@ -6,36 +6,20 @@ Validation has two channels:
   * NON-FATAL problems are returned as a list of ValidationWarning so a
     partially-complete ICD can still be loaded and finished in the tool.
 
-XML is validated against the (registry-assembled) XSD; JSON against an
-equivalent jsonschema. Both converge on the same IcdModel. The raw input bytes
-are hashed (SHA-256) before parsing so the provenance stamp traces to the exact
-authored file.
+The ICD definition file is YAML. It is parsed with PyYAML ``safe_load`` and the
+resulting structure is validated against a JSON Schema that is generated from
+the field registries (``schema_gen``), so the schema can never drift from the
+registry. The raw input bytes are hashed (SHA-256) before parsing so the
+provenance stamp traces to the exact authored file.
 """
 from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 from dataclasses import dataclass
 
-from lxml import etree
-
-from .signal_codec import (parse_signal_xml, parse_interface_xml,
-                           parse_packet_xml, interface_from_json_dict)
-from .model import (
-    IcdModel,
-    Interface,
-    Metadata,
-    PriorRevision,
-    RevisionEntry,
-    Signal,
-)
-
-XSD_NAMESPACE = "urn:icdgen:icd:1.0"
-SUPPORTED_SCHEMA_VERSIONS = {"1.0"}
-
-_C_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+import yaml
 
 
 @dataclass
@@ -65,6 +49,21 @@ class ValidationWarning:
     line: int | None = None
 
 
+from .model import (  # noqa: E402
+    IcdModel,
+    Interface,
+    Metadata,
+    PriorRevision,
+    RevisionEntry,
+    Signal,
+)
+from .signal_codec import interface_from_json_dict  # noqa: E402
+
+SUPPORTED_SCHEMA_VERSIONS = {"1.0"}
+
+_C_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
 def hash_file(path: str) -> str:
     """SHA-256 of the raw input bytes. The traceability anchor."""
     h = hashlib.sha256()
@@ -75,97 +74,11 @@ def hash_file(path: str) -> str:
 
 
 # --------------------------------------------------------------------------
-# XML path
+# Schema (generated from the field registries — single source of truth)
 # --------------------------------------------------------------------------
-def _validate_xml(path: str) -> etree._Element:
-    from .resources import compiled_xsd
-    schema_doc = etree.fromstring(compiled_xsd().encode("utf-8"))
-    schema = etree.XMLSchema(schema_doc)
-    parser = etree.XMLParser(remove_blank_text=False)
-    try:
-        tree = etree.parse(path, parser)
-    except etree.XMLSyntaxError as exc:
-        line = exc.lineno if exc.lineno else None
-        raise ValidationError(f"XML syntax error: {exc.msg}", line=line, source=path)
-
-    if not schema.validate(tree):
-        first = schema.error_log[0]
-        raise ValidationError(
-            f"Schema validation failed: {first.message}",
-            line=first.line,
-            source=path,
-        )
-    return tree.getroot()
-
-
-def _q(tag: str) -> str:
-    return f"{{{XSD_NAMESPACE}}}{tag}"
-
-
-def _text(elem, tag, default=None):
-    child = elem.find(_q(tag))
-    if child is None or child.text is None:
-        return default
-    return child.text.strip()
-
-
-def _model_from_xml(root: etree._Element) -> IcdModel:
-    schema_version = root.get("schemaVersion")
-
-    meta_el = root.find(_q("metadata"))
-    rev_hist_el = meta_el.find(_q("revisionHistory"))
-    history = tuple(
-        RevisionEntry(
-            revision=_text(e, "revision"),
-            date=_text(e, "date"),
-            author=_text(e, "author"),
-            description=_text(e, "description"),
-        )
-        for e in rev_hist_el.findall(_q("entry"))
-    )
-    metadata = Metadata(
-        document_id=_text(meta_el, "documentId"),
-        document_title=_text(meta_el, "documentTitle"),
-        program=_text(meta_el, "program"),
-        revision=_text(meta_el, "revision"),
-        revision_date=_text(meta_el, "revisionDate"),
-        author=_text(meta_el, "author"),
-        revision_history=history,
-    )
-
-    interfaces = []
-    for iface_el in root.find(_q("interfaces")).findall(_q("interface")):
-        packets = []
-        for pkt_el in iface_el.find(_q("packets")).findall(_q("packet")):
-            signals = []
-            for sig_el in pkt_el.find(_q("signals")).findall(_q("signal")):
-                signals.append(parse_signal_xml(sig_el, XSD_NAMESPACE, _text))
-            packets.append(parse_packet_xml(pkt_el, XSD_NAMESPACE, _text, signals))
-        interfaces.append(
-            parse_interface_xml(iface_el, XSD_NAMESPACE, _text, packets)
-        )
-
-    prior = []
-    pr_el = root.find(_q("priorRevisions"))
-    if pr_el is not None:
-        for e in pr_el.findall(_q("priorRevision")):
-            prior.append(PriorRevision(revision=e.get("revision"),
-                                       source=e.get("source")))
-
-    return IcdModel(
-        schema_version=schema_version,
-        metadata=metadata,
-        interfaces=tuple(interfaces),
-        prior_revisions=tuple(prior),
-    )
-
-
-# --------------------------------------------------------------------------
-# JSON path
-# --------------------------------------------------------------------------
-def _json_schema() -> dict:
-    """Equivalent constraints to the XSD, expressed for jsonschema. The signal
-    and interface objects are generated from the registries (single source)."""
+def _data_schema() -> dict:
+    """The JSON Schema the parsed YAML is validated against. The signal and
+    interface objects are generated from the registries (single source)."""
     from .schema_gen import json_signal_schema, json_interface_schema
 
     signal = json_signal_schema()
@@ -236,23 +149,40 @@ def _json_schema() -> dict:
     }
 
 
-def _validate_json(path: str) -> dict:
+def schema_hash() -> str:
+    """SHA-256 of the generated JSON Schema (canonical JSON). Provenance anchor
+    for the schema the input was validated against."""
+    canon = json.dumps(_data_schema(), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
+
+
+# --------------------------------------------------------------------------
+# YAML load + validate
+# --------------------------------------------------------------------------
+def _validate_yaml(path: str) -> dict:
     import jsonschema
 
     with open(path, "r", encoding="utf-8") as fh:
         raw = fh.read()
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValidationError(f"JSON syntax error: {exc.msg}",
-                              line=exc.lineno, source=path)
+        data = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        line = None
+        mark = getattr(exc, "problem_mark", None)
+        if mark is not None:
+            line = mark.line + 1
+        raise ValidationError(f"YAML syntax error: {exc}", line=line, source=path)
 
-    validator = jsonschema.Draft7Validator(_json_schema())
+    if not isinstance(data, dict):
+        raise ValidationError("Top-level YAML must be a mapping (an ICD object).",
+                              source=path)
+
+    validator = jsonschema.Draft7Validator(_data_schema())
     errors = sorted(validator.iter_errors(data), key=lambda e: list(e.path))
     if errors:
         err = errors[0]
         loc = "/".join(str(p) for p in err.path) or "<root>"
-        line = _approx_json_line(raw, err.path)
+        line = _approx_line(raw, err.path)
         raise ValidationError(
             f"Schema validation failed at '{loc}': {err.message}",
             line=line, source=path,
@@ -260,18 +190,20 @@ def _validate_json(path: str) -> dict:
     return data
 
 
-def _approx_json_line(raw: str, path) -> int | None:
+def _approx_line(raw: str, path) -> int | None:
+    """Best-effort source line for a schema error: locate the deepest mapping
+    key from the error path in the raw YAML text (keys appear as ``key:``)."""
     keys = [p for p in path if isinstance(p, str)]
     if not keys:
         return None
-    needle = f'"{keys[-1]}"'
+    needle = f"{keys[-1]}:"
     for i, ln in enumerate(raw.splitlines(), start=1):
-        if needle in ln:
+        if needle in ln.strip():
             return i
     return None
 
 
-def _model_from_json(data: dict) -> IcdModel:
+def _model_from_data(data: dict) -> IcdModel:
     m = data["metadata"]
     history = tuple(
         RevisionEntry(revision=e["revision"], date=e["date"],
@@ -366,19 +298,14 @@ def _semantic_checks(model: IcdModel, source: str) -> list[ValidationWarning]:
 
 
 def load(path: str) -> tuple[IcdModel, str, list[ValidationWarning]]:
-    """Validate and load an input file. Returns (model, sha256_hex, warnings).
+    """Validate and load a YAML ICD definition. Returns (model, sha256_hex,
+    warnings).
 
-    Format is inferred from extension: .json -> JSON, otherwise XML.
     Raises ValidationError on a FATAL problem; non-fatal issues come back as
     the warnings list so partially-complete ICDs can still be loaded.
     """
     file_hash = hash_file(path)
-    ext = os.path.splitext(path)[1].lower()
-    if ext == ".json":
-        data = _validate_json(path)
-        model = _model_from_json(data)
-    else:
-        root = _validate_xml(path)
-        model = _model_from_xml(root)
+    data = _validate_yaml(path)
+    model = _model_from_data(data)
     warnings = _semantic_checks(model, path)
     return model, file_hash, warnings
