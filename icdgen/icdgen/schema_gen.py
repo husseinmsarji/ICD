@@ -1,8 +1,8 @@
 """Derive JSON Schema fragments from the field registries.
 
-The JSON Schema objects for *signals* and *interfaces* are GENERATED here from
-the ``FieldSpec`` registries, so the validation rules can never drift from the
-serializer or the model. The loader assembles the full document schema
+The JSON Schema objects for signals and interfaces are generated here from
+the ``FieldSpec`` registries, keeping the validation rules in sync with the
+serializer and the model. The loader assembles the full document schema
 (``loader._data_schema``) around these fragments and validates the parsed YAML
 against it.
 """

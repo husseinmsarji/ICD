@@ -1,10 +1,8 @@
 """Reconcile a freshly-generated requirement set against a previously-exported
-one (e.g. what's already loaded in the RM tool). The four-state report is the
-high-value output: it tells an engineer exactly which RM objects to add, update,
-or retire after an ICD or config change.
+one (e.g. what's already loaded in the RM tool). The four-state report says
+which RM objects to add, update, or retire after an ICD or config change.
 
-Matching is by stable Requirement ID; change detection is by text. Both come
-free from the generator's deterministic IDs.
+Matching is by stable Requirement ID; change detection is by text.
 """
 from __future__ import annotations
 

@@ -4,12 +4,12 @@
 {% endfor %} * ============================================================================
  * Document: {{ model.metadata.document_id }} rev {{ model.metadata.revision }}
  *
- * MISRA C:2012 oriented: C only (no C++ constructs), fixed-width integer types
- * from <stdint.h>, fully-parenthesized macro bodies, and integer constant
- * suffixes (U for unsigned). This is generated code; do not edit by hand.
- * NOTE: signals with an unspecified type render with a uint8_t placeholder, and
- * signals whose name is not a valid C identifier will not compile as-is (both
- * are reported as warnings by the tool).
+ * MISRA C:2012. Fixed-width integer types from <stdint.h>, fully
+ * parenthesized macro bodies, integer constant suffixes (U for unsigned).
+ * Generated code; do not edit by hand.
+ * Signals with an unspecified type render as a uint8_t placeholder. Signals
+ * whose name is not a valid C identifier will not compile as-is. The tool
+ * reports both as warnings.
  * ============================================================================
  */
 #ifndef {{ guard }}

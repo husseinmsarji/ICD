@@ -398,7 +398,7 @@ def test_revision_summary_computes_against_prior(tmp_path):
 
 def test_revision_summary_missing_source_is_graceful(tmp_path):
     from icdgen.rev_summary import compute_revision_summaries
-    # rev B with a second history entry but NO priorRevisions link.
+    # rev B with a second history entry but no priorRevisions link.
     body = _doc(_sig(), revision="B",
                 history=[("A", "2026-06-01", "H", "d"),
                          ("B", "2026-06-02", "H", "x")])

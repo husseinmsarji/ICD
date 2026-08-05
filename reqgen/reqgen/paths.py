@@ -1,19 +1,16 @@
-"""Where the reqgen config of record lives.
+"""Default location of the reqgen config file.
 
-The config is a version-controlled qualification artifact. By project convention
-it lives at `reqgen/config/reqgen.json` — i.e. a `config/` folder inside the
-reqgen project directory (the first layer of reqgen/, alongside pyproject.toml),
-NOT at the repo root next to icdgen/. Baking the convention here means no one has
-to remember to type `-c`: the CLI defaults to it, and the (future) UI reads and
-writes the same resolved path.
+The config is a version-controlled qualification artifact. It lives at
+`reqgen/config/reqgen.json` (inside the reqgen project dir, alongside
+pyproject.toml), not at the repo root next to icdgen/. The CLI and UI both
+resolve this path here, so `-c` is only needed for non-standard layouts.
 
-Resolution order for the default config path:
-  1. $REQGEN_CONFIG if set (explicit override, e.g. CI or a non-standard tree).
-  2. The reqgen project's own `config/reqgen.json`, located relative to this
-     file (reqgen/reqgen/paths.py -> up two levels is the reqgen/ project dir).
-     This is the canonical home and works regardless of the current directory.
-  3. If that project dir can't be determined, fall back to `config/reqgen.json`
-     under the current directory.
+Resolution order:
+  1. $REQGEN_CONFIG if set (e.g. CI or a non-standard tree).
+  2. `config/reqgen.json` in the reqgen project dir, located relative to this
+     file (reqgen/reqgen/paths.py -> up two levels). Works regardless of cwd.
+  3. If the project dir can't be determined, `config/reqgen.json` under the
+     current directory.
 """
 from __future__ import annotations
 
@@ -27,10 +24,9 @@ ENV_VAR = "REQGEN_CONFIG"
 def _project_dir() -> str | None:
     """The reqgen/ project directory: parent of the importable package.
 
-    This file is reqgen/reqgen/paths.py; its dir is reqgen/reqgen/ and the
-    parent is the reqgen/ project root (which holds pyproject.toml and config/).
-    Returns None for an unusual install layout (e.g. a zipped package) where the
-    parent isn't a real directory on disk.
+    This file is reqgen/reqgen/paths.py, so the parent of its dir is the
+    project root (holds pyproject.toml and config/). Returns None when that
+    parent isn't a real directory on disk (e.g. a zipped install).
     """
     pkg_dir = os.path.dirname(os.path.abspath(__file__))   # reqgen/reqgen
     proj = os.path.dirname(pkg_dir)                         # reqgen

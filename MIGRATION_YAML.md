@@ -29,7 +29,7 @@ So the migration is: (a) parse YAML → dict → reuse the existing schema + mod
 construction; (b) add a deterministic `to_yaml` serializer; (c) delete the XML
 machinery; (d) migrate examples/tests/docs.
 
-## 3. Determinism strategy (the critical risk)
+## 3. Determinism strategy
 
 The value proposition is *byte-identical output* (DO-330 evidence). Rather than
 depend on a third-party YAML emitter's formatting/quoting rules, the canonical
@@ -46,7 +46,7 @@ serializer is **hand-rolled** (mirroring the previous hand-rolled `to_xml`):
   YAML is minimal and stable.
 
 Parsing uses PyYAML `safe_load` (parsing does not affect output bytes; the
-emitter owns determinism). `PyYAML` is EXACT-pinned like every other dependency.
+emitter owns determinism). `PyYAML` is exact-pinned like every other dependency.
 
 ## 4. File-by-file change map
 

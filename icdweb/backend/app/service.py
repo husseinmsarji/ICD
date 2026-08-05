@@ -6,11 +6,10 @@ Responsibilities:
   * Generate artifacts into a per-project output directory.
   * Diff two definitions.
 
-Storage is deliberately a flat directory tree under DATA_DIR. This is easy to
-reason about for a single user and maps cleanly onto a future object store or
-database: a "project" is just (id, definition.json, latest artifacts). Nothing
-here assumes a single process, so it is safe to run behind multiple workers as
-long as DATA_DIR is shared.
+Storage is a flat directory tree under DATA_DIR; a project is just
+(id, definition.json, latest artifacts), which maps directly onto a future
+object store or database. Nothing here assumes a single process, so multiple
+workers are fine as long as DATA_DIR is shared.
 """
 from __future__ import annotations
 
@@ -172,9 +171,9 @@ def _safe_rev_token(rev: str) -> str:
 
     `prior_files` keys come straight from the request body; without this, a
     key like '../../x' would let the temp prior file escape the project's
-    output directory (path traversal). The PriorRevision keeps the ORIGINAL
-    revision string (it must match the revision-history letters); only the
-    on-disk filename is sanitized.
+    output directory (path traversal). Only the on-disk filename is sanitized;
+    the PriorRevision keeps the original revision string, which must match the
+    revision-history letters.
     """
     token = re.sub(r"[^A-Za-z0-9_-]", "_", str(rev))
     return token or "_"
@@ -184,12 +183,12 @@ def generate(project_id: str, formats: list[str],
              prior_files: dict[str, str] | None = None) -> dict:
     """Generate artifacts for a project.
 
-    `prior_files` is an optional, JUST-IN-TIME map of {revision_letter: file
+    `prior_files` is an optional just-in-time map of {revision_letter: file
     text} uploaded in the editor for Flow A. Each entry is written to a temp
     file inside the output dir and linked as a synthetic PriorRevision so the
-    DOCX/PDF revision table's "Change Summary Report" column populates. These
-    files are transient: they are NOT part of the saved definition and are
-    removed after generation.
+    DOCX/PDF revision table's "Change Summary Report" column populates. The
+    files are transient: not part of the saved definition, removed after
+    generation.
     """
     dto = read_definition(project_id)
     errors, warnings = validate_dto(dto)

@@ -8,20 +8,19 @@ Precedence (highest wins): per-signal override -> per-interface override ->
 global aspect set/template -> aspect default. Only structural facts are
 transcribed; nothing here authors engineering intent.
 
-L3 GRANULARITY. The L3 (interface) layer is written at one of two granularities,
+L3 granularity: the L3 (interface) layer is written at one of two granularities,
 mirroring the ICD hierarchy:
-  * "port"   -> one L3 row per INTERFACE. Aspects that describe the interface /
-                port contract between two LRUs (connectivity, bus/protocol, DAL).
-  * "packet" -> one L3 row per PACKET. Aspects that describe the per-message
-                layer carried on the interface (the packet exists, its refresh
-                rate).
-An L3 aspect is only emitted when its declared granularity (see AspectSpec.
+  * "port"   -> one L3 row per interface. Aspects describing the interface/port
+                contract between two LRUs (connectivity, bus/protocol, DAL).
+  * "packet" -> one L3 row per packet. Aspects describing the per-message layer
+                carried on the interface (the packet exists, its refresh rate).
+An L3 aspect is only emitted when its declared granularity (AspectSpec.
 granularity) matches the active l3_granularity, so a port requirement never
 transcribes a packet-only field (e.g. update_rate_hz) and a packet requirement
 never transcribes a port-only field (e.g. source_lru/destination_lru). This is
 enforced in addition to suppression and applicability.
 
-APPLICABILITY. An aspect is skipped when any field it `requires` is blank in the
+Applicability: an aspect is skipped when any field it `requires` is blank in the
 ICD, so no vacuous shall-statement (e.g. "range [, ]") is produced; the skipped
 element then shows as a coverage gap in the traceability matrix.
 """
@@ -62,9 +61,9 @@ def _fmt_value(v) -> str:
 
 
 def _raw_field_values(iface, pkt, sig) -> dict:
-    """Flat dict of every substitutable ICD field, UNFORMATTED (raw model
-    values). Used both for applicability checks (is the field present?) and,
-    after formatting, for template substitution."""
+    """Flat dict of every substitutable ICD field, as raw model values. Used
+    for applicability checks (is the field present?) and, after formatting, for
+    template substitution."""
     vals = {
         "iface": iface.id,
         "packet": pkt.name if pkt else "",
@@ -109,9 +108,9 @@ def _applicable(aspect_key: str, raw_vals: dict) -> bool:
 
 
 def _resolve_l3_aspects(cfg: ReqConfig, iface) -> list[str]:
-    """The L3 aspects to attempt for this interface, filtered to those VALID at
-    the active granularity. Granularity filtering happens here (not just in the
-    UI) so the CLI and any direct API caller are correct too."""
+    """The L3 aspects to attempt for this interface, filtered to those valid
+    at the active granularity. Filtering happens here (not just in the UI) so
+    the CLI and any direct API caller are correct too."""
     ov = cfg.interfaces.get(iface.id)
     base = ov.l3_aspects if (ov and ov.l3_aspects is not None) else cfg.l3_aspects
     return [a for a in base

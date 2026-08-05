@@ -7,12 +7,11 @@ exactly one source of truth for the wire format, shared by the CLI and the web
 layer.
 
 Determinism: the emitter is hand-rolled (not a third-party YAML dumper) so the
-output bytes are fully under our control — a hard requirement because identical
-input must produce byte-identical artifacts (DO-330 evidence). Key order is
-fixed (registry order for signals/interfaces), indentation is 2 spaces, and
-*every string scalar is double-quoted and escaped*. Quoting every string is what
-keeps the output unambiguous and stable, and it stops YAML from coercing a value
-like ``2026-06-01`` into a native date on re-parse.
+output bytes are fully controlled here; identical input must produce
+byte-identical artifacts (DO-330 evidence). Key order is fixed (registry order
+for signals/interfaces), indentation is 2 spaces, and every string scalar is
+double-quoted and escaped, which keeps the output unambiguous and stops YAML
+from coercing a value like ``2026-06-01`` into a native date on re-parse.
 """
 from __future__ import annotations
 

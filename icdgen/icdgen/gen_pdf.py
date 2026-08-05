@@ -147,7 +147,7 @@ def build_pdf(model: IcdModel, prov: Provenance, path: str,
     story.append(ovt)
     story.append(PageBreak())
 
-    # ---- Per-interface / per-packet signal tables (FULL field set) ----
+    # ---- Per-interface / per-packet signal tables (full field set) ----
     story.append(Paragraph("Interface Definitions", ss["Heading1"]))
     usable = doc.width
     total_w = sum(w for _l, _a, w in _SIGNAL_COLS)

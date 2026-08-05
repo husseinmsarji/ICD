@@ -1,21 +1,15 @@
 """Single source of truth for ICD signal fields.
 
-THE ONE PLACE TO ADD A SIGNAL FIELD.
-====================================
 Every signal field is declared exactly once, here, as a ``FieldSpec``. The JSON
 Schema fragment (used to validate the parsed YAML), the editable form column,
-the API options payload, and the YAML serialization/parsing are all *derived*
-from this registry rather than restated.
-
-Why a registry instead of scattered definitions:
-  * Before, a new field meant editing several files that could silently disagree.
-  * The validation schema is generated from one description, so it can never
-    drift from the serializer or the model.
+the API options payload, and the YAML serialization/parsing are all derived
+from this registry rather than restated, so the validation schema stays in sync
+with the serializer and the model.
 
 Determinism: the registry is an ordered tuple. Field order here fixes column
-order in every artifact AND key order in the canonical YAML. Appending a new
-field is safe (it lands last); reordering changes output and is therefore a
-deliberate, reviewable act.
+order in every artifact and key order in the canonical YAML. Appending a new
+field is safe (it lands last); reordering changes output and must be a
+deliberate, reviewed change.
 """
 from __future__ import annotations
 
@@ -93,18 +87,18 @@ class FieldSpec:
 
 
 # ---------------------------------------------------------------------------
-# THE SIGNAL REGISTRY. Order = column order in every artifact and key order in
+# Signal registry. Order = column order in every artifact and key order in
 # the canonical YAML.
 #
-# Permissive-by-design (v1.5.0) so partially-complete ICDs can be uploaded and
+# Permissive by design (v1.5.0) so partially-complete ICDs can be uploaded and
 # finished in the tool. Fields that are blank/absent on import produce non-fatal
-# WARNINGS (see loader._semantic_checks), not errors.
+# warnings (see loader._semantic_checks), not errors.
 # ---------------------------------------------------------------------------
 SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         # Relaxed pattern: allow hyphen, hash, dot, etc. so draft ICDs import.
         # A name that is not a valid C identifier still loads but raises a
-        # non-fatal WARNING (it cannot become a C struct field / macro verbatim).
+        # non-fatal warning (it cannot become a C struct field / macro verbatim).
         name="name", json_name="name", label="Signal Name",
         py_type=str, required=True,
         pattern="[^\\s\x22\x27<>]+", ui_width="auto",
@@ -117,7 +111,7 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         # Optional so an in-progress signal can have a blank type. A blank type
-        # cannot map to a real C/Simulink type, so it raises a non-fatal WARNING
+        # cannot map to a real C/Simulink type, so it raises a non-fatal warning
         # and the generated header uses a placeholder.
         name="signal_type", json_name="signalType",
         label="Signal Type", py_type=str,
@@ -187,7 +181,7 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         # Freeform change-control ticket that last touched this signal (e.g. a
-        # PR/Jira id). Optional in the schema; a non-fatal WARNING is raised by
+        # PR/Jira id). Optional in the schema; a non-fatal warning is raised by
         # loader._semantic_checks when a signal has no ticket and the ICD
         # revision is not the initial "A". Emitted only when non-empty.
         name="pr_ticket", json_name="prTicket",
@@ -201,7 +195,7 @@ SIGNAL_FIELDS_BY_NAME: dict[str, FieldSpec] = {f.name: f for f in SIGNAL_FIELDS}
 
 
 # ---------------------------------------------------------------------------
-# INTERFACE-LEVEL field registry. The child ``packets`` collection is NOT a
+# Interface-level field registry. The child ``packets`` collection is not a
 # scalar field and is handled structurally.
 # ---------------------------------------------------------------------------
 INTERFACE_FIELDS: tuple[FieldSpec, ...] = (

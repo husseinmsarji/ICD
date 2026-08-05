@@ -1,28 +1,25 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { api } from './api.js';
 
-// ============================================================================
-// reqgen config editor — a VIEW/EDITOR over reqgen/config/reqgen.json.
+// reqgen config editor: an editor over reqgen/config/reqgen.json.
 //
-// Invariant: the config FILE is the single record of truth. This component
-// holds only a transient DRAFT; the single writer (backend save_config) is
-// reached via Save. It never persists state any other way.
+// The config file is the source of truth. This component holds only a
+// transient draft; Save writes through the backend save_config, the single
+// writer. Nothing else persists state.
 //
-// STATE OWNERSHIP: all editor state (draft, chosen ICD source, preview, trace,
-// reconcile) lives in App via the `state`/`patch` props, NOT in this
-// component's own useState. App keeps this panel mounted across tab switches
-// (display:none when inactive), so lifting the state there is what makes the
-// reqgen draft survive a switch to the ICD Editor tab and back. This component
-// is now a controlled view over `state`.
+// All editor state (draft, chosen ICD source, preview, trace, reconcile)
+// lives in App via the `state`/`patch` props, not in local useState. App
+// keeps this panel mounted across tab switches (display:none when inactive),
+// and lifting the state there is what lets the draft survive a switch to the
+// ICD Editor tab and back. This component is a controlled view over `state`.
 //
 // The editor builds itself from /api/reqgen/meta (the aspect registry
-// descriptor) exactly like the ICD form builds from the field registry, so a
+// descriptor), the same way the ICD form builds from the field registry, so a
 // new aspect in config_schema.py appears here with no change to this file.
 //
-// Bright line: a template may use only its aspect's declared fields as
-// {placeholders}. We check that client-side for instant feedback AND the
-// backend re-checks on save (400). Both must agree.
-// ============================================================================
+// A template may use only its aspect's declared fields as {placeholders}.
+// Checked client-side for instant feedback and re-checked by the backend on
+// save (400); both must agree.
 
 // Extract {placeholder} base names from a template (mirrors the server parser:
 // base name before any .attr / [idx]). Bare {} -> '' so we can flag it.
@@ -66,7 +63,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
     }));
   }, [patch]);
 
-  // ---- bootstrap: descriptor + config of record (ONCE; guarded by loaded) ----
+  // ---- bootstrap: descriptor + config of record (once; guarded by loaded) ----
   useEffect(() => {
     if (loaded) return;
     (async () => {
@@ -78,10 +75,10 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
   }, [loaded, patch, onToast]);
 
   // An L3 aspect is valid at a granularity when its `granularity` is that mode
-  // or "both"; L4 aspects are always valid. This is the client mirror of the
-  // backend `aspect_valid_at`, so the editor only OFFERS aspects that actually
-  // generate at the chosen granularity (port no longer shows the packet-only
-  // RATE; packet no longer shows the port-only CONNECT/BUS).
+  // or "both"; L4 aspects are always valid. Client mirror of the backend
+  // `aspect_valid_at`, so the editor only offers aspects that actually
+  // generate at the chosen granularity (port does not show the packet-only
+  // RATE; packet does not show the port-only CONNECT/BUS).
   const aspectValidAt = useCallback((a, gran) => {
     if (a.level !== 'L3') return true;
     return a.granularity === 'both' || a.granularity === gran;
@@ -159,7 +156,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
     patchDraft({ templates });
   };
 
-  // ---- dirty + client-side bright-line validity ----
+  // ---- dirty + client-side placeholder validity ----
   const templateErrors = useMemo(() => {
     if (!draft || !meta) return [];
     const errs = [];
@@ -234,7 +231,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
       patch({ savedHash: r.configHash });
       onToast?.('Config saved');
     } catch (e) {
-      // Backend bright-line / schema rejection (400) lands here with its message.
+      // Backend placeholder / schema rejection (400) lands here with its message.
       onToast?.(String(e.message || e), true);
     } finally { setSaving(false); }
   };
@@ -357,7 +354,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
                         className={bad.length ? 'err' : ''}
                         style={{ fontFamily: 'var(--mono)', fontSize: 12 }} />
                       {bad.length > 0 && (
-                        <div className="bright-line-warn">
+                        <div className="placeholder-warn">
                           ✕ {bad.map((b) => (b === '' ? '{}' : `{${b}}`)).join(', ')} not allowed for {a.key}.
                           Allowed: {a.fields.map((f) => `{${f}}`).join(', ')} — a {a.key} requirement may only transcribe its own fields.
                         </div>
@@ -381,8 +378,8 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
           <h2>Live Preview</h2>
           <span className="spacer" />
           {templateErrors.length > 0
-            ? <span className="bad mono" style={{ fontSize: 11 }}>● {templateErrors.length} bright-line error(s)</span>
-            : <span className="ok mono" style={{ fontSize: 11 }}>● bright-line clean</span>}
+            ? <span className="bad mono" style={{ fontSize: 11 }}>● {templateErrors.length} placeholder error(s)</span>
+            : <span className="ok mono" style={{ fontSize: 11 }}>● placeholders ok</span>}
         </div>
         <div className="card-body">
           <div className="grid cols-3" style={{ alignItems: 'end' }}>
@@ -747,7 +744,7 @@ function OverrideCard({ id, ov, aspects, aspectByKey, onChange, onRemove, hasL3A
               <input value={v} onChange={(e) => setTmpl(k, e.target.value)}
                 className={bad.length ? 'err' : ''} style={{ fontFamily: 'var(--mono)', fontSize: 12 }} />
               {bad.length > 0 && (
-                <div className="bright-line-warn">
+                <div className="placeholder-warn">
                   ✕ {bad.map((b) => (b === '' ? '{}' : `{${b}}`)).join(', ')} not allowed for {k}.
                 </div>
               )}

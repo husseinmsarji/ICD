@@ -1,8 +1,7 @@
 /* ============================================================================
-   icdgen editor — design system
-   Aesthetic: avionics instrument panel. Near-black field, phosphor accents,
-   monospace data, tight grid. Precision over decoration. Every color carries
-   meaning (green = valid/TX, amber = caution, red = error, cyan = RX).
+   icdgen editor styles
+   Dark panel theme, monospace data. Color meanings: green = valid/TX,
+   amber = caution, red = error, cyan = RX.
    ============================================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
@@ -35,7 +34,7 @@
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
   --sans: 'IBM Plex Sans', system-ui, sans-serif;
 
-  --r: 4px;                 /* radius — small, instrument-like */
+  --r: 4px;                 /* corner radius */
   --gap: 16px;
 }
 
@@ -323,8 +322,8 @@ select { cursor: pointer; }
 }
 .aspect-row:last-child { border-bottom: none; }
  
-/* ---- Bright-line violation banner (inline, under a template input) ---- */
-.bright-line-warn {
+/* ---- Placeholder violation banner (inline, under a template input) ---- */
+.placeholder-warn {
   margin-top: 5px;
   padding: 6px 9px;
   font-family: var(--mono); font-size: 11px; line-height: 1.4;

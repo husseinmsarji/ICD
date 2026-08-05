@@ -5,9 +5,9 @@ For DO-330 tool-qualification evidence each output must declare:
   * the SHA-256 of the exact input file,
   * the input schema version.
 
-Determinism note: the stamp intentionally contains NO timestamp or hostname.
-Identical inputs must yield byte-identical outputs. Run time is recorded only
-in the separate run log, never embedded in artifacts.
+The stamp deliberately carries no timestamp or hostname: identical inputs
+must yield byte-identical outputs. Run time goes in the separate run log,
+not in artifacts.
 """
 from __future__ import annotations
 

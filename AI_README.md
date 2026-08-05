@@ -31,9 +31,12 @@ No open blocking issues. Prior section-0 items resolved:
   `reqgen/tests/test_reqgen.py` (revC/revB, 6 if / 9 pkt / 31 sig).
 - **Example header counts** — the YAML `#` headers state the true counts
   (revB 16 signals, revC 9 packets / 31 signals).
-- **PR Ticket traceability column** — `gen_trace.py` now actually emits the
-  "PR Ticket" column (it was documented but never implemented before the YAML
-  migration; the registry recipe in section 12 was completed).
+- **PR Ticket traceability column** — `gen_trace.py` emits the "PR Ticket"
+  column. The implementation had been sitting in a misplaced copy at
+  `reqgen/reqgen/gen_trace.py` (inert there — icdgen-only relative imports)
+  while the live file lacked it, so `test_pr_ticket_in_traceability` failed.
+  Fixed independently on both the XML-era branch and the YAML migration; the
+  orphan file is deleted.
 
 Recently delivered (no version bump): the **YAML migration** (section 9.8), a
 **granularity-aware L3 aspect model** (port/interface-contract aspects vs
@@ -43,6 +46,16 @@ release gate, the `ICDGEN_TEMPLATE_DIR` override with run.log provenance
 closure, the PR Ticket traceability column, the C-header/Simulink sanitizers,
 and the prior-file path-traversal guard. Details in sections 1, 9.6, 9.8, 10,
 15, 16.
+
+**Doc refresh + comment style pass (no version bump, no functional change).**
+The four stale docs (`TESTING.md`, `icdgen/README.md`, `reqgen/README.md`,
+`icdweb/README.md`) were rewritten to current state, and comments/docstrings
+across all three tools (plus the Jinja templates and example headers) were
+rewritten into plain technical English. No executable code, identifiers, or
+runtime strings changed. One byte-level consequence survives the YAML merge:
+the `header.h.j2` emitted banner text changed, so generated `.h` bytes differ
+from pre-cleanup baselines (re-baseline per section 11; run-to-run determinism
+verified intact).
 
 ---
 
@@ -144,7 +157,7 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 ```
 <repo root>/
 ├── AI_README.md                  ← this file
-├── TESTING.md                    (frozen at v1.2.0-era content; see section 14)
+├── TESTING.md                    (run/verify walkthrough, current at 1.6.0)
 ├── .dockerignore
 │
 ├── icdgen/                       ← CORE library + CLI (pip-installable)
@@ -153,7 +166,7 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 │   ├── icdgen.spec               PyInstaller build spec (bundles the Jinja
 │   │                             templates; no schema file to bundle)
 │   ├── run.py / pyi_rth_docx.py  PyInstaller entry + runtime hook
-│   ├── README.md                 (stale v1.2.0-era paths; see section 14)
+│   ├── README.md                 (current at 1.6.0)
 │   ├── examples/
 │   │   ├── icd_evtol_revA.yaml         initial release (3 if / 3 pkt / 9 sig)
 │   │   ├── icd_evtol_revB.yaml         adds AHRS bus (4 if / 5 pkt / 16 sig);
@@ -679,8 +692,6 @@ Jinja override), `REQGEN_CONFIG` (optional config-of-record path).
   Flow A's summary suppresses them; a shared policy flag would unify them.
 - **Example headers** (`#` comment blocks in the YAML) state the true counts;
   keep them in sync when editing an example.
-- **`TESTING.md` and `icdgen/README.md` are frozen at v1.2.0-era content**
-  (icd_demo paths, wrong counts, XML/`schemas/icd-1.0.xsd` references) — rewrite.
 - **Date parity:** the JSON Schema validates `revisionDate`/`date` as plain
   strings (the removed XSD validated `xs:date`). Intentional relaxation, carried
   over from the pre-migration JSON-input path.
@@ -750,10 +761,8 @@ matrix, and a reconciliation report. Never writes to the ICD.
    to the qualification Tool Operational Requirements.
 5. **ReqIF / tool-specific reqgen exporter** — blocked on naming the target RM
    tool (DOORS / Jama / Polarion / etc.).
-6. **Fix the remaining doc debt:** rewrite `TESTING.md` and `icdgen/README.md`
-   (still v1.2.0-era: icd_demo paths, wrong counts, XML/XSD references).
-7. **Unify the hash-semantics policy** (raw bytes vs canonical YAML) across the
+6. **Unify the hash-semantics policy** (raw bytes vs canonical YAML) across the
    CLI diff and the web paths, and document it.
-8. **Optional:** fold the template-set hash into `Provenance.footer_line()` at
+7. **Optional:** fold the template-set hash into `Provenance.footer_line()` at
    the next major re-baseline (tri-hash stamp, symmetric with reqgen's dual
    hash); add move detection to `diff.py`.

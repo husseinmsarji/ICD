@@ -7,9 +7,9 @@ add a field" guarantee (``schema_gen`` covers validation; this module covers
 data movement).
 
 Two dict representations exist, both keyed by ``FieldSpec.json_name``:
-  * ``*_to_json_dict`` / ``*_from_json_dict`` — the LOOSE, all-fields shape used
+  * ``*_to_json_dict`` / ``*_from_json_dict`` — the loose, all-fields shape used
     by the web API DTOs (every key present, so the wire contract is stable).
-  * ``*_to_yaml_dict`` — the MINIMAL, ordered shape the canonical YAML serializer
+  * ``*_to_yaml_dict`` — the minimal, ordered shape the canonical YAML serializer
     emits (optional/blank fields dropped via ``FieldSpec.emit_if``).
 
 Coercion rules per ``FieldSpec.py_type``:
@@ -118,7 +118,7 @@ def packet_from_json_dict(d: dict[str, Any]) -> Packet:
 
 # ===========================================================================
 # Canonical-YAML dict builders. Unlike the *_to_json_dict functions (which are
-# the loose, all-fields API representation), these produce the MINIMAL ordered
+# the loose, all-fields API representation), these produce the minimal ordered
 # dict the serializer emits: registry order, with optional/blank fields dropped
 # via each FieldSpec.emit_if. Keys are FieldSpec.json_name (camelCase), which
 # double as the YAML keys.

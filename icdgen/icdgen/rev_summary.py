@@ -123,7 +123,7 @@ def _pr_grouped_lines(res, old_model, new_model) -> list[str]:
         sig = new_sig.get(key)
         # pr_ticket is the attribution mechanism, not a reportable interface
         # change: drop it from the listed fields, and skip the signal entirely
-        # if the ticket was the ONLY thing that changed.
+        # if the ticket was the only thing that changed.
         fields = [c.field for c in sc.changes if c.field != "pr_ticket"]
         if not fields:
             continue

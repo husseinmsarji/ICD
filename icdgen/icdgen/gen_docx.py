@@ -20,8 +20,9 @@ from .provenance import Provenance
 
 _HEADER_BLUE = RGBColor(0x1F, 0x4E, 0x79)
 
-# Full signal column set, sourced from the registry so the document can never
-# silently omit a field. (label, attribute-name) in registry order.
+# Full signal column set, sourced from the registry so a new signal field
+# shows up here without a code change. (label, attribute-name) in registry
+# order.
 _SIGNAL_COLS = [(f.label, f.name) for f in SIGNAL_FIELDS]
 
 
@@ -154,7 +155,7 @@ def build_docx(model: IcdModel, prov: Provenance, path: str,
         cells[4].text = iface.source_lru
         cells[5].text = iface.destination_lru
 
-    # ---- Per-interface / per-packet signal tables (FULL field set) ----
+    # ---- Per-interface / per-packet signal tables (full field set) ----
     doc.add_heading("Interface Definitions", level=1)
     for iface in model.interfaces:
         doc.add_heading(f"{iface.id} \u2014 {iface.name}", level=2)

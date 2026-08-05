@@ -1,12 +1,10 @@
 """Provenance for reqgen.
 
-A generated requirements module traces to THREE anchors:
-  * the reqgen tool version,
-  * the SHA-256 of the exact ICD source file it read,
-  * the SHA-256 of the exact config file that drove generation.
-
-Two inputs (ICD + config), both hashed, so a generated requirement is
-reproducible from a known ICD and a known config. No timestamp in artifacts.
+A generated requirements module traces to three anchors: the reqgen tool
+version, the SHA-256 of the ICD source file it read, and the SHA-256 of the
+config file that drove generation. Both inputs are hashed, so a generated
+requirement is reproducible from a known ICD and a known config. No timestamps
+in artifacts.
 """
 from __future__ import annotations
 
