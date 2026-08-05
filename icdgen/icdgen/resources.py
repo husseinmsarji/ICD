@@ -4,7 +4,7 @@ Works both from a source checkout and from a PyInstaller onefile bundle, where
 data files are unpacked under sys._MEIPASS. All access to the Jinja templates
 must go through here so the standalone executable can find them.
 
-TEMPLATE OVERRIDE (modularity): a program may supply its own Jinja templates
+Template override: a program may supply its own Jinja templates
 (e.g. a house-style header.h.j2) by setting $ICDGEN_TEMPLATE_DIR. Because an
 overridden template is a real tool input that changes artifact bytes, the
 template set is hashable via template_manifest(); the CLI records those hashes

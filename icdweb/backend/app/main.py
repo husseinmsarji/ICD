@@ -22,7 +22,7 @@ requirement-generation config editor). Endpoints:
   GET    /api/reqgen/meta             aspect-registry descriptor for the editor
   GET    /api/reqgen/config           config of record (+ hash)
   PUT    /api/reqgen/config           validate + save a config draft (400 on
-                                      bright-line / schema violation)
+                                      placeholder-restriction / schema violation)
   POST   /api/reqgen/preview          generate requirements from a draft config
   POST   /api/reqgen/trace            traceability matrix (rows + coverage)
   POST   /api/reqgen/trace.csv        traceability matrix as a CSV download
@@ -317,7 +317,8 @@ def reqgen_put_config(payload: dict = Body(...)):
     try:
         return reqgen_service.save(cfg)
     except reqgen_service.ConfigError as exc:
-        # Bright-line / schema violation -> 400 with the specific message.
+        # Placeholder-restriction / schema violation -> 400 with the specific
+        # message.
         raise HTTPException(400, str(exc))
 
 

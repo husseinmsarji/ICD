@@ -9,9 +9,9 @@ Non-fatal warnings (e.g. missing signal type, non-C-identifier name, missing
 PR ticket) are printed to stderr but do not change the exit code, so
 partially-complete ICDs still work.
 
-RELEASE GATE: pass --strict to `validate` or `generate` to treat any warning
+Release gate: pass --strict to `validate` or `generate` to treat any warning
 as fatal (exit 1, nothing generated). Drafts run permissive; a formal release
-build runs --strict so no ICD with open warnings can ship into a change
+build runs --strict so an ICD with open warnings cannot ship into a change
 package or CI release lane.
 """
 from __future__ import annotations
@@ -152,10 +152,11 @@ def cmd_diff(args) -> int:
 
 def _write_run_log(out_dir: str, input_path: str, prov: Provenance,
                    produced: list[str]) -> None:
-    """Per-invocation provenance record. The ONLY place wall-clock time
+    """Per-invocation provenance record; the only place wall-clock time
     appears. Records the full input set: ICD hash, the generated-schema hash,
     and every Jinja template's hash, so an overridden template
-    ($ICDGEN_TEMPLATE_DIR) is an auditable input, never a silent substitution.
+    ($ICDGEN_TEMPLATE_DIR) is an auditable input rather than a silent
+    substitution.
     """
     from .loader import schema_hash
     from .resources import template_dir, template_manifest

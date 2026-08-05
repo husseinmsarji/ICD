@@ -1,16 +1,16 @@
 """Input loading, schema validation, and canonical model construction.
 
 Validation has two channels:
-  * FATAL problems raise ValidationError (with a line reference). The file does
+  * Fatal problems raise ValidationError (with a line reference). The file does
     not load.
-  * NON-FATAL problems are returned as a list of ValidationWarning so a
+  * Non-fatal problems are returned as a list of ValidationWarning so a
     partially-complete ICD can still be loaded and finished in the tool.
 
 The ICD definition file is YAML. It is parsed with PyYAML ``safe_load`` and the
-resulting structure is validated against a JSON Schema that is generated from
-the field registries (``schema_gen``), so the schema can never drift from the
-registry. The raw input bytes are hashed (SHA-256) before parsing so the
-provenance stamp traces to the exact authored file.
+resulting structure is validated against a JSON Schema generated from the field
+registries (``schema_gen``), keeping schema and registry in sync. The raw input
+bytes are hashed (SHA-256) before parsing so the provenance stamp traces to the
+exact authored file.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ import yaml
 
 @dataclass
 class ValidationError(Exception):
-    """Raised on a FATAL input validation failure. Carries a line reference."""
+    """Raised on a fatal input validation failure. Carries a line reference."""
     message: str
     line: int | None = None
     source: str | None = None
@@ -43,8 +43,8 @@ class ValidationError(Exception):
 
 @dataclass
 class ValidationWarning:
-    """A NON-FATAL issue. The file still loads; the warning is surfaced to the
-    user (CLI/UI) so a partially-complete ICD can be finished in the tool."""
+    """A non-fatal issue. The file still loads; the warning is surfaced in the
+    CLI/UI so a partially-complete ICD can be finished in the tool."""
     message: str
     line: int | None = None
 
@@ -236,7 +236,7 @@ def _model_from_data(data: dict) -> IcdModel:
 # Cross-field semantic checks (beyond what schema can express)
 # --------------------------------------------------------------------------
 def _semantic_checks(model: IcdModel, source: str) -> list[ValidationWarning]:
-    """FATAL problems raise ValidationError. NON-FATAL problems are returned as
+    """Fatal problems raise ValidationError. Non-fatal problems are returned as
     a list of ValidationWarning so a partially-complete ICD can still load."""
     warnings: list[ValidationWarning] = []
 
@@ -272,14 +272,14 @@ def _semantic_checks(model: IcdModel, source: str) -> list[ValidationWarning]:
                         f"Duplicate signal '{sig.name}' in packet "
                         f"'{pkt.name}' of interface '{iface.id}'", source=source)
                 seen_sig.add(sig.name)
-                # Range check only when BOTH bounds are present (both optional).
+                # Range check only when both bounds are present (both optional).
                 if (sig.range_min is not None and sig.range_max is not None
                         and sig.range_min > sig.range_max):
                     raise ValidationError(
                         f"Signal '{sig.name}' in '{iface.id}/{pkt.name}': "
                         f"rangeMin ({sig.range_min}) > rangeMax ({sig.range_max})",
                         source=source)
-                # ---- WARNINGS (non-fatal) ----
+                # ---- Warnings (non-fatal) ----
                 if not sig.signal_type:
                     warnings.append(ValidationWarning(
                         f"Signal '{where}' has no signal type; the C header "
@@ -301,7 +301,7 @@ def load(path: str) -> tuple[IcdModel, str, list[ValidationWarning]]:
     """Validate and load a YAML ICD definition. Returns (model, sha256_hex,
     warnings).
 
-    Raises ValidationError on a FATAL problem; non-fatal issues come back as
+    Raises ValidationError on a fatal problem; non-fatal issues come back as
     the warnings list so partially-complete ICDs can still be loaded.
     """
     file_hash = hash_file(path)

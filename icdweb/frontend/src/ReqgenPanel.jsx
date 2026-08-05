@@ -156,7 +156,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
     patchDraft({ templates });
   };
 
-  // ---- dirty + client-side bright-line validity ----
+  // ---- dirty + client-side placeholder validity ----
   const templateErrors = useMemo(() => {
     if (!draft || !meta) return [];
     const errs = [];
@@ -231,7 +231,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
       patch({ savedHash: r.configHash });
       onToast?.('Config saved');
     } catch (e) {
-      // Backend bright-line / schema rejection (400) lands here with its message.
+      // Backend placeholder / schema rejection (400) lands here with its message.
       onToast?.(String(e.message || e), true);
     } finally { setSaving(false); }
   };
@@ -354,7 +354,7 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
                         className={bad.length ? 'err' : ''}
                         style={{ fontFamily: 'var(--mono)', fontSize: 12 }} />
                       {bad.length > 0 && (
-                        <div className="bright-line-warn">
+                        <div className="placeholder-warn">
                           ✕ {bad.map((b) => (b === '' ? '{}' : `{${b}}`)).join(', ')} not allowed for {a.key}.
                           Allowed: {a.fields.map((f) => `{${f}}`).join(', ')} — a {a.key} requirement may only transcribe its own fields.
                         </div>
@@ -378,8 +378,8 @@ export default function ReqgenPanel({ projects, onToast, state, patch }) {
           <h2>Live Preview</h2>
           <span className="spacer" />
           {templateErrors.length > 0
-            ? <span className="bad mono" style={{ fontSize: 11 }}>● {templateErrors.length} bright-line error(s)</span>
-            : <span className="ok mono" style={{ fontSize: 11 }}>● bright-line clean</span>}
+            ? <span className="bad mono" style={{ fontSize: 11 }}>● {templateErrors.length} placeholder error(s)</span>
+            : <span className="ok mono" style={{ fontSize: 11 }}>● placeholders ok</span>}
         </div>
         <div className="card-body">
           <div className="grid cols-3" style={{ alignItems: 'end' }}>
@@ -744,7 +744,7 @@ function OverrideCard({ id, ov, aspects, aspectByKey, onChange, onRemove, hasL3A
               <input value={v} onChange={(e) => setTmpl(k, e.target.value)}
                 className={bad.length ? 'err' : ''} style={{ fontFamily: 'var(--mono)', fontSize: 12 }} />
               {bad.length > 0 && (
-                <div className="bright-line-warn">
+                <div className="placeholder-warn">
                   ✕ {bad.map((b) => (b === '' ? '{}' : `{${b}}`)).join(', ')} not allowed for {k}.
                 </div>
               )}

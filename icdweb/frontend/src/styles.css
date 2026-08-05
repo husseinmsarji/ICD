@@ -322,8 +322,8 @@ select { cursor: pointer; }
 }
 .aspect-row:last-child { border-bottom: none; }
  
-/* ---- Bright-line violation banner (inline, under a template input) ---- */
-.bright-line-warn {
+/* ---- Placeholder violation banner (inline, under a template input) ---- */
+.placeholder-warn {
   margin-top: 5px;
   padding: 6px 9px;
   font-family: var(--mono); font-size: 11px; line-height: 1.4;

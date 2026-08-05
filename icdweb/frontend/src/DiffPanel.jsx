@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { api } from './api.js';
 
-// Two-file "Compare Revisions" panel. Pick an OLD and a NEW ICD (YAML);
+// Two-file "Compare Revisions" panel. Pick an old and a new ICD (YAML);
 // the backend diffs them and returns a formatted PDF change report, which is
 // downloaded directly. There is no on-screen diff view — the report is the
 // deliverable (suitable for a change package).

@@ -249,7 +249,7 @@ def default_config() -> ReqConfig:
 
 
 # ---------------------------------------------------------------------------
-# Bright-line placeholder enforcement: a template may only reference the
+# Placeholder enforcement: a template may only reference the
 # placeholders its aspect declares in `fields`. Anything else (e.g. {dal} in a
 # TYPE template) is rejected by config_io._validate and the web layer.
 # ---------------------------------------------------------------------------
@@ -281,7 +281,7 @@ def allowed_placeholders(aspect_key: str) -> tuple[str, ...]:
 def invalid_placeholders(aspect_key: str, template: str) -> list[str]:
     """Placeholders in `template` that are NOT allowed for `aspect_key`.
 
-    An empty list means the template is bright-line-clean. A non-empty list is
+    An empty list means the template is clean. A non-empty list is
     the set of offending names (including '' for a bare '{}'). The caller turns
     this into a fatal ConfigError on save and a preview guard.
     """

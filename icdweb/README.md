@@ -3,7 +3,7 @@
 A form-based web app over the `icdgen` core library. It has **two tabs**:
 
 - **ICD Editor** — author interfaces/packets/signals in a form (no hand-writing
-  XML), validate live against the schema, generate all artifacts (DOCX/PDF, C
+  YAML), validate live against the schema, generate all artifacts (DOCX/PDF, C
   header, Simulink bus script, traceability matrix), and build diff reports.
 - **Requirements** — the `reqgen` config editor: edit the requirement config,
   see a live requirements preview, view the coverage/traceability matrix, and
@@ -36,7 +36,7 @@ FastAPI backend  ── service layer ──►  icdgen core library  (loader, g
   routing.
 - **Frontend (`icdweb/frontend/`)** is React. The form builds all its inputs
   from the registry descriptors served by `/api/meta/options`, then round-trips
-  the model through the identical XSD/jsonschema gate via `icdgen.serializer`.
+  the model through the identical JSON-Schema gate via `icdgen.serializer`.
   A hand-authored file and a form-built one are validated by exactly the same
   code.
 
@@ -81,7 +81,7 @@ Docker/production build, the backend serves the built frontend on a single port.
 
 ## Using the editor
 
-1. **New** creates an empty ICD, or **Import XML / JSON** loads an existing
+1. **New** creates an empty ICD, or **Import YAML** loads an existing
    definition into an editable project.
 2. Edit document metadata, add interfaces/packets, and fill the signal tables.
    The status bar shows live schema validity (debounced), an unsaved indicator,
@@ -92,7 +92,7 @@ Docker/production build, the backend serves the built frontend on a single port.
 4. **Save** persists the definition.
 5. In **Generate Artifacts**, choose formats and generate. Download links
    appear, each stamped with the input SHA-256 and tool version; the canonical
-   source XML is downloadable too ("Export source XML").
+   source YAML is downloadable too ("Export source YAML").
 6. **Diff** compares two definitions and downloads a PDF change report.
 7. The **Requirements** tab edits the reqgen config, previews requirements, and
    shows the coverage strip + traceability matrix with a CSV download. Its
@@ -110,8 +110,8 @@ Docker/production build, the backend serves the built frontend on a single port.
 | POST | `/api/projects/{id}/validate` | validate (line-referenced errors + warnings) |
 | POST | `/api/projects/{id}/generate` | generate selected artifacts (optional `priorFiles`) |
 | GET | `/api/projects/{id}/artifacts/{file}` | download an artifact |
-| GET | `/api/projects/{id}/export.xml` | canonical source XML |
-| POST | `/api/import` | parse uploaded XML/JSON into a definition |
+| GET | `/api/projects/{id}/export.yaml` | canonical source YAML |
+| POST | `/api/import` | parse uploaded YAML into a definition |
 | POST | `/api/diff` | diff two saved definitions (JSON) |
 | POST | `/api/diff-files` | diff two uploaded files (JSON) |
 | POST | `/api/diff-report` | diff two files → **PDF** change report (download) |
@@ -128,11 +128,11 @@ Docker/production build, the backend serves the built frontend on a single port.
   `service.ARTIFACT_BUILDERS`. The API and the UI's format checklist pick it up
   automatically (the frontend reads the list from `/api/meta/options`).
 - **New signal/interface field**: add one `FieldSpec` in `icdgen/icdgen/fields.py`
-  plus one dataclass attribute in `model.py`. The XSD, jsonschema, serializer,
+  plus one dataclass attribute in `model.py`. The JSON Schema, serializer,
   DTO descriptor, and the React form column all derive from the registry — the
   editor and validator stay in lockstep automatically.
-- **New schema version**: the namespace is versioned; add a `1.1` XSD template
-  and register it in `loader.SUPPORTED_SCHEMA_VERSIONS`.
+- **New schema version**: the `schemaVersion` key is versioned; register the
+  new value in `loader.SUPPORTED_SCHEMA_VERSIONS`.
 
 ## Environment variables
 

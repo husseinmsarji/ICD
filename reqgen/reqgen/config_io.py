@@ -106,7 +106,7 @@ def _validate(cfg: ReqConfig) -> None:
     _check_id_format(cfg.id_format_l3, "id_format_l3")
     _check_id_format(cfg.id_format_l4, "id_format_l4")
 
-    # Global template overrides: known aspect + bright-line placeholders.
+    # Global template overrides: known aspect + allowed placeholders.
     for key, tmpl in cfg.templates.items():
         if key not in ASPECTS_BY_KEY:
             raise ConfigError(f"template for unknown aspect '{key}'")
@@ -185,7 +185,7 @@ def config_from_dict(d: dict) -> ReqConfig:
 
     Used by the web layer to validate a posted draft without writing it
     (preview / pre-save). Raises ConfigError on a fatal problem, including a
-    bright-line placeholder violation or an L3 aspect that does not fit the
+    disallowed placeholder or an L3 aspect that does not fit the
     configured granularity."""
     cfg = _from_dict(d)
     _validate(cfg)

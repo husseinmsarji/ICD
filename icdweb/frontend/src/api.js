@@ -7,7 +7,7 @@ async function req(path, opts = {}) {
   const res = await fetch(path, opts);
   if (!res.ok) {
     // Prefer FastAPI's {detail: ...} message when present (e.g. a 400 from a
-    // bright-line config violation), so the UI can show the specific reason.
+    // config placeholder violation), so the UI can show the specific reason.
     let detail = '';
     try {
       const j = await res.clone().json();
@@ -21,8 +21,8 @@ async function req(path, opts = {}) {
 }
 
 // Shared helper: POST a JSON body, get back a file download (CSV/PDF/etc).
-// Throws with the server's message (e.g. which side failed to parse / bright
-// line). Returns the downloaded filename.
+// Throws with the server's message (e.g. which side failed to parse, or a
+// placeholder violation). Returns the downloaded filename.
 async function downloadPost(path, body, fallbackName) {
   const res = await fetch(path, { method: 'POST', headers: J, body: JSON.stringify(body) });
   if (!res.ok) {

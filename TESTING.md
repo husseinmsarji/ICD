@@ -19,9 +19,9 @@ The demo ICD is **`ICD-EVTOL-AVS-200`**, supplied as three revisions:
 
 | File | Interfaces | Packets | Signals |
 |---|---|---|---|
-| `icdgen/examples/icd_evtol_revA.xml` | 3 | 3 | 9 |
-| `icdgen/examples/icd_evtol_revB.xml` | 4 | 5 | 16 |
-| `icdgen/examples/icd_evtol_revC.xml` (current) | 6 | 9 | 31 |
+| `icdgen/examples/icd_evtol_revA.yaml` | 3 | 3 | 9 |
+| `icdgen/examples/icd_evtol_revB.yaml` | 4 | 5 | 16 |
+| `icdgen/examples/icd_evtol_revC.yaml` (current) | 6 | 9 | 31 |
 
 ---
 
@@ -35,22 +35,23 @@ source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -e ./icdgen              # installs the EXACT-pinned dependencies
 ```
 
-### 1b. Run the test suite (expect: 36 passed)
+### 1b. Run the test suite (expect: 38 passed)
 
 ```bash
 pip install pytest
 cd icdgen && python -m pytest tests/ -q && cd ..
 ```
 
-The suite covers XML+JSON validation with line-referenced errors, the signal
-AND interface registry↔schema sync guards, codec round-trips, byte-determinism,
-the prior-revision auto-diff summaries, and `test_pr_ticket_in_traceability`
-(the PR Ticket column in the traceability matrix).
+The suite covers YAML validation with line-referenced errors, the signal and
+interface registry↔schema sync guards, codec round-trips, byte-determinism
+(including the hand-rolled YAML emitter), the prior-revision auto-diff
+summaries, and `test_pr_ticket_in_traceability` (the PR Ticket column in the
+traceability matrix).
 
 ### 1c. Validate the current demo (expect: 6 interfaces, 9 packets, 31 signals)
 
 ```bash
-python -m icdgen validate icdgen/examples/icd_evtol_revC.xml
+python -m icdgen validate icdgen/examples/icd_evtol_revC.yaml
 ```
 
 Post-Rev-A ICDs emit non-fatal `WARNING`s for signals carried over without a PR
@@ -60,7 +61,7 @@ fatal (the release gate).
 ### 1d. Generate all artifacts
 
 ```bash
-python -m icdgen generate icdgen/examples/icd_evtol_revC.xml -o out
+python -m icdgen generate icdgen/examples/icd_evtol_revC.yaml -o out
 ls out
 ```
 
@@ -74,8 +75,8 @@ You should see, for `ICD-EVTOL-AVS-200`:
 Generate twice and confirm identical hashes:
 
 ```bash
-python -m icdgen generate icdgen/examples/icd_evtol_revC.xml -o det1
-python -m icdgen generate icdgen/examples/icd_evtol_revC.xml -o det2
+python -m icdgen generate icdgen/examples/icd_evtol_revC.yaml -o det1
+python -m icdgen generate icdgen/examples/icd_evtol_revC.yaml -o det2
 # macOS/Linux:
 for f in ICD-EVTOL-AVS-200.h ICD-EVTOL-AVS-200.pdf ICD-EVTOL-AVS-200.docx \
          ICD-EVTOL-AVS-200_traceability.csv ICD-EVTOL-AVS-200_traceability.xlsx; do
@@ -96,8 +97,8 @@ so don't hash it.
 ### 1f. Verify the DIFF feature (text / CSV / PDF)
 
 ```bash
-python -m icdgen diff icdgen/examples/icd_evtol_revB.xml \
-                      icdgen/examples/icd_evtol_revC.xml -o out
+python -m icdgen diff icdgen/examples/icd_evtol_revB.yaml \
+                      icdgen/examples/icd_evtol_revC.yaml -o out
 ```
 
 Writes `ICD-EVTOL-AVS-200_diff.{txt,csv,pdf}` classifying added / removed /
@@ -130,9 +131,9 @@ Covers the aspect registry, the L3 port/packet granularity model, applicability
 
 ```bash
 reqgen init                                             # writes config/reqgen.json from defaults
-reqgen generate icdgen/examples/icd_evtol_revC.xml -o out
-reqgen trace    icdgen/examples/icd_evtol_revC.xml -o out
-reqgen reconcile icdgen/examples/icd_evtol_revC.xml out/ICD-EVTOL-AVS-200_requirements.csv
+reqgen generate icdgen/examples/icd_evtol_revC.yaml -o out
+reqgen trace    icdgen/examples/icd_evtol_revC.yaml -o out
+reqgen reconcile icdgen/examples/icd_evtol_revC.yaml out/ICD-EVTOL-AVS-200_requirements.csv
 ```
 
 Expected: `generate` → `ICD-EVTOL-AVS-200_requirements.csv` (80 requirements for
@@ -154,7 +155,7 @@ docker compose -f icdweb/docker-compose.yml up --build
 First build takes a few minutes. Then open **http://localhost:8000**.
 
 Smoke test in the UI:
-1. **Import XML / JSON** and choose `icdgen/examples/icd_evtol_revC.xml`. The
+1. **Import YAML** and choose `icdgen/examples/icd_evtol_revC.yaml`. The
    form fills with 6 interfaces; expand one and edit a signal — the status bar
    shows **SCHEMA VALID** (or a line-referenced error) and an amber warning
    count.
@@ -206,11 +207,11 @@ prior-file path-traversal guard).
 ( cd icdgen && python -m pytest tests/ -q ) && \
 ( cd icdgen && PYTHONPATH=../reqgen python -m pytest ../reqgen/tests/ -q ) && \
 ( cd icdweb/backend && ICDGEN_DATA_DIR=/tmp/icdtest python -m pytest tests/ -q ) && \
-python -m icdgen generate icdgen/examples/icd_evtol_revC.xml -o /tmp/_v && \
+python -m icdgen generate icdgen/examples/icd_evtol_revC.yaml -o /tmp/_v && \
 echo "ALL GREEN"
 ```
 
-Expected tail: `36 passed`, `25 passed`, `9 passed`, a generate summary, then
+Expected tail: `38 passed`, `25 passed`, `9 passed`, a generate summary, then
 `ALL GREEN`.
 
 ---

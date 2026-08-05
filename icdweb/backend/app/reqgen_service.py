@@ -1,18 +1,18 @@
 """Service layer for the reqgen config editor (icdweb backend).
 
-reqgen's config FILE is the single record of truth and `config_io.save_config`
-is its ONLY writer. This module is a thin orchestrator over reqgen: it never
+reqgen's config file is the single source of truth and `config_io.save_config`
+is its only writer. This module is a thin orchestrator over reqgen: it never
 holds its own copy of the config and never writes the file by any other path.
 
 Responsibilities:
   * read the config of record (+ its hash) for the editor to display,
   * validate + save a posted draft (delegates to save_config, which enforces
-    the bright-line placeholder rule and rejects bad configs),
-  * generate a live requirements PREVIEW from a posted (unsaved) draft against a
-    chosen ICD — saved project or just-in-time uploaded YAML — without writing,
-  * reconcile a draft's output against the SAVED config's output so the editor
-    can show "what your edits change" before you commit,
-  * build the requirements-to-signals TRACEABILITY MATRIX from a posted draft
+    the placeholder restriction and rejects bad configs),
+  * generate a live requirements preview from a posted (unsaved) draft against a
+    chosen ICD (saved project or just-in-time uploaded YAML) without writing,
+  * reconcile a draft's output against the saved config's output so the editor
+    can show the effect of unsaved edits before saving,
+  * build the requirements-to-signals traceability matrix from a posted draft
     against a chosen ICD (rows + coverage summary for the UI), and stream it as
     a downloadable CSV.
 
@@ -76,7 +76,7 @@ def read_config() -> dict:
 def save(config_dict: dict) -> dict:
     """Validate + persist a posted config draft. Returns the new hash.
 
-    Validation (including the bright-line placeholder check) happens inside
+    Validation (including the placeholder restriction) happens inside
     config_from_dict/save_config; a violation raises ConfigError, which the
     route turns into a 400 so the editor shows the specific message.
     """
@@ -136,8 +136,9 @@ def _reqs_to_rows(reqs) -> list[dict]:
 
 def preview(payload: dict) -> dict:
     """Generate requirements from the posted draft config against the chosen
-    ICD. Validates the draft first (bright line included) so the preview can
-    never crash on a bad placeholder; a ConfigError comes back as ok=False."""
+    ICD. Validates the draft first (placeholder restriction included) so the
+    preview cannot crash on a bad placeholder; a ConfigError comes back as
+    ok=False."""
     try:
         cfg = config_from_dict(payload.get("config") or {})
     except ConfigError as exc:
@@ -238,10 +239,10 @@ def trace_csv(payload: dict) -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------
-# Reconcile — draft output vs SAVED-config output (impact of your edits)
+# Reconcile — draft output vs saved-config output
 # --------------------------------------------------------------------------
 def reconcile(payload: dict) -> dict:
-    """Compare what the posted draft would generate against what the SAVED
+    """Compare what the posted draft would generate against what the saved
     config of record generates, for the same ICD. Shows added/removed/changed
     requirement IDs so the editor can preview the impact before saving."""
     try:
