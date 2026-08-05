@@ -50,6 +50,16 @@ Separately, the four stale docs (`TESTING.md`, `icdgen/README.md`,
 `reqgen/README.md`, `icdweb/README.md`) were rewritten to the current 1.6.0
 state, and the revB/revC example XML header comments were corrected.
 
+**Comment/docstring style pass (no version bump, no functional change).** All
+comments and docstrings across icdgen, reqgen, icdweb (backend + frontend), the
+tests, the Jinja/XSD templates, the example XML headers, and the markdown docs
+were rewritten into plain technical English. No executable code, identifiers,
+or runtime strings changed; all suites stay green (36/25/9). Two byte-level
+consequences: (a) the `header.h.j2` emitted banner text changed, so generated
+`.h` bytes differ from pre-cleanup baselines (re-baseline per section 11 —
+run-to-run determinism verified intact); (b) the example XML header comments
+changed, so the examples' input SHA-256s (stamped into their artifacts) differ.
+
 ---
 
 ## 1. Version & history

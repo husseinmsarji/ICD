@@ -6,7 +6,7 @@
   breaking input files authored against 1.0.
 
   Extensibility contract:
-    * Additive-only within a major version: new OPTIONAL elements/attributes
+    * Additive-only within a major version: new optional elements/attributes
       may be added in a minor revision. Required fields are never added in a
       minor revision (that would break existing files), only in a major bump.
     * <extensions> is a forward-compatibility escape hatch (lax processing):

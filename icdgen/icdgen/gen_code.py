@@ -1,19 +1,18 @@
 """Source-code artifact generators: C header and Simulink bus script.
 
 The C header targets MISRA C:2012: fixed-width types, fully parenthesized macro
-bodies, and integer-constant suffixes (U for unsigned). Both generators are pure
-template renders over the canonical model, making them trivially deterministic.
+bodies, and integer-constant suffixes (U for unsigned). Both generators are
+pure template renders over the canonical model, so output is deterministic.
 
 Optional numeric fields (range_min/range_max/update_rate_hz) may be None on an
 in-progress ICD; the helpers below tolerate None and the template emits a
 placeholder comment instead of a #define in that case.
 
-MACRO-NAME SAFETY: packet names are unconstrained xs:string and signal names
-use the relaxed (non-C-identifier-permitting) pattern, so every token embedded
-in a #define name goes through `macro_token` (sanitize + uppercase). Struct
-FIELD names intentionally stay raw: silently rewriting a wire-mapped field name
-would be worse than the existing non-C-identifier warning, which already covers
-that case.
+Macro-name safety: packet names are unconstrained xs:string and signal names
+use the relaxed pattern (non-C identifiers allowed), so every token embedded
+in a #define name is sanitized and uppercased first. Struct field names stay
+raw on purpose: a non-C-identifier field name already gets a loader warning,
+and silently rewriting a wire-mapped name would be worse.
 """
 from __future__ import annotations
 

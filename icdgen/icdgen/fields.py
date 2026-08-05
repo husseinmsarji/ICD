@@ -1,20 +1,12 @@
-"""Single source of truth for ICD signal fields.
+"""Field registry for ICD signals and interfaces.
 
-THE ONE PLACE TO ADD A SIGNAL FIELD.
-====================================
-Every signal field is declared exactly once, here, as a ``FieldSpec``. The XSD
-fragment, the JSON Schema fragment, the editable form column, the API options
-payload, the XML serialization, and the parsing logic are all *derived* from
-this registry rather than restated.
+Each field is declared once here as a ``FieldSpec``. The XSD fragment, JSON
+Schema fragment, editable form columns, API options payload, XML
+serialization, and parsing logic are all derived from this registry.
 
-Why a registry instead of scattered definitions:
-  * Before, a new field meant editing 7 files that could silently disagree.
-  * The XSD and JSON Schema were two hand-maintained copies of the same rules —
-    a latent drift bug. Now both are generated from one description.
-
-Determinism: the registry is an ordered tuple. Field order here fixes column
-order in every artifact. Appending a new field is safe (it lands last);
-reordering changes output and is therefore a deliberate, reviewable act.
+Determinism: the registry is an ordered tuple; field order fixes column order
+in every artifact. Appending a new field is safe (it lands last); reordering
+changes output.
 """
 from __future__ import annotations
 
@@ -48,8 +40,8 @@ DATA_TYPE_NAMES: tuple[str, ...] = tuple(d.name for d in DATA_TYPES)
 C_TYPE_MAP: dict[str, str] = {d.name: d.c_type for d in DATA_TYPES}
 SIMULINK_TYPE_MAP: dict[str, str] = {d.name: d.simulink_type for d in DATA_TYPES}
 
-# Interface-level suggestion lists. BUS_TYPES is now only a *suggestion* set for
-# the UI (bus type is freeform); DAL is still an enforced enum.
+# Interface-level lists. BUS_TYPES is a UI suggestion set only (bus type is
+# freeform); DAL is an enforced enum.
 BUS_TYPES: tuple[str, ...] = (
     "ARINC429", "MIL-STD-1553", "ARINC664", "CAN", "DISCRETE", "ANALOG",
 )
@@ -63,7 +55,7 @@ XML_ELEMENT = "element"
 
 @dataclass(frozen=True)
 class FieldSpec:
-    """Complete description of one field, in one place."""
+    """Declaration of a single field."""
     name: str
     xml_name: str
     json_name: str
@@ -97,17 +89,17 @@ class FieldSpec:
 
 
 # ---------------------------------------------------------------------------
-# THE SIGNAL REGISTRY. Order = column order in every artifact.
+# Signal registry. Order = column order in every artifact.
 #
-# Permissive-by-design (v1.5.0) so partially-complete ICDs can be uploaded and
-# finished in the tool. Fields that are blank/absent on import produce non-fatal
-# WARNINGS (see loader._semantic_checks), not errors.
+# Permissive by design (v1.5.0) so partially-complete ICDs can be uploaded and
+# finished in the tool. Fields that are blank/absent on import produce
+# non-fatal warnings (see loader._semantic_checks), not errors.
 # ---------------------------------------------------------------------------
 SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(
         # Relaxed pattern: allow hyphen, hash, dot, etc. so draft ICDs import.
         # A name that is not a valid C identifier still loads but raises a
-        # non-fatal WARNING (it cannot become a C struct field / macro verbatim).
+        # non-fatal warning (it cannot become a C struct field / macro verbatim).
         name="name", xml_name="name", json_name="name", label="Signal Name",
         py_type=str, xml_location=XML_ATTRIBUTE, required=True,
         pattern="[^\\s\x22\x27<>]+", ui_width="auto",
@@ -120,7 +112,7 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         # Optional so an in-progress signal can have a blank type. A blank type
-        # cannot map to a real C/Simulink type, so it raises a non-fatal WARNING
+        # cannot map to a real C/Simulink type, so it raises a non-fatal warning
         # and the generated header uses a placeholder.
         name="signal_type", xml_name="signalType", json_name="signalType",
         label="Signal Type", py_type=str, xml_location=XML_ATTRIBUTE,
@@ -190,9 +182,9 @@ SIGNAL_FIELDS: tuple[FieldSpec, ...] = (
     ),
     FieldSpec(
         # Freeform change-control ticket that last touched this signal (e.g. a
-        # PR/Jira id). Optional in the schema; a non-fatal WARNING is raised by
-        # loader._semantic_checks when a signal has no ticket and the ICD
-        # revision is not the initial "A". Emitted only when non-empty.
+        # PR/Jira id). Optional in the schema; loader._semantic_checks raises a
+        # non-fatal warning when a signal has no ticket and the ICD revision is
+        # past the initial "A". Emitted only when non-empty.
         name="pr_ticket", xml_name="prTicket", json_name="prTicket",
         label="PR Ticket", py_type=str, xml_location=XML_ELEMENT, required=False,
         default=None, ui_width="auto",
@@ -204,8 +196,8 @@ SIGNAL_FIELDS_BY_NAME: dict[str, FieldSpec] = {f.name: f for f in SIGNAL_FIELDS}
 
 
 # ---------------------------------------------------------------------------
-# INTERFACE-LEVEL field registry. The child <packets> collection is NOT a
-# scalar field and is handled structurally.
+# Interface-level field registry. The child <packets> collection is not a
+# scalar field; it is handled structurally.
 # ---------------------------------------------------------------------------
 INTERFACE_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec(

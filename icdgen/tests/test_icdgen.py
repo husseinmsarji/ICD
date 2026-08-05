@@ -4,10 +4,9 @@ Covers schema validation (XML+JSON, line-referenced errors), the relaxed-rule
 behavior (v1.5.0), the warnings channel, byte-determinism, provenance stamping,
 registry/schema sync, and diff detection.
 
-Examples: the suite runs against the three-revision eVTOL ICD
-(icd_evtol_revA/B/C.xml). revA is the single-baseline stand-in formerly played
-by icd_example.xml; the revB->revC pair is the diff fixture formerly played by
-icd_demo.xml -> icd_demo_revD.xml.
+Fixtures: the three-revision eVTOL ICD (icd_evtol_revA/B/C.xml). revA replaces
+the old single-baseline icd_example.xml; the revB->revC pair replaces the
+icd_demo.xml -> icd_demo_revD.xml diff fixture.
 """
 import os
 import subprocess
@@ -461,9 +460,9 @@ def test_serializer_escapes_quotes_in_attributes(tmp_path):
 
 # ---- configuration-management guards ----
 def test_package_version_matches_tool_version():
-    """pyproject version and the provenance TOOL_VERSION are independent by
-    design, but the packaging version must not silently lag the project; guard
-    that pyproject parses and exposes a concrete version string."""
+    """pyproject version and the provenance TOOL_VERSION are versioned
+    independently. Check that pyproject parses and carries a concrete semver
+    version string so the packaging version cannot silently lag."""
     import re
     pyproject = os.path.join(ROOT, "pyproject.toml")
     text = open(pyproject, encoding="utf-8").read()

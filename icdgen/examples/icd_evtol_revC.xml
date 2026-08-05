@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  eVTOL Integrated Avionics ICD — Revision C (current).
-  Adds the environmental/air-data bus and the motor-telemetry bus; adds a
-  VELOCITY packet to navigation and a CELL_HEALTH packet to the battery bus;
-  widens the torque limit; tightens the yaw-rate range; removes the aggregate
-  bms_fault (superseded by per-cell health). New and modified signals cite the
-  AVS change-control ticket that introduced them. Links Rev B as the prior
-  revision so the Change Summary Report auto-populates.
+  eVTOL Integrated Avionics ICD, Revision C (current).
+  Adds the environmental/air-data and motor-telemetry buses, a navigation
+  VELOCITY packet, and a battery CELL_HEALTH packet; widens the torque limit;
+  tightens the yaw-rate range; removes the aggregate bms_fault (superseded by
+  per-cell health). New/modified signals cite their AVS change-control ticket.
+  priorRevision links Rev B so the Change Summary Report auto-populates.
   6 interfaces, 9 packets, 31 signals. Schema-valid against urn:icdgen:icd:1.0.
 -->
 <icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  eVTOL Integrated Avionics ICD — Revision A (initial release).
-  3 interfaces, 3 packets, 9 signals. Rev A is the baseline, so signals carry
-  no AVS change-control tickets (none are expected at initial release).
+  eVTOL Integrated Avionics ICD, Revision A (initial release).
+  3 interfaces, 3 packets, 9 signals. Baseline revision: signals carry no AVS
+  change-control tickets (none expected at initial release).
   Schema-valid against urn:icdgen:icd:1.0.
 -->
 <icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">

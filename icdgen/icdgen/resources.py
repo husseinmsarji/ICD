@@ -1,20 +1,18 @@
 """Resolve bundled data files (schema, templates) at runtime.
 
-Works both from a source checkout and from a PyInstaller onefile bundle, where
-data files are unpacked under sys._MEIPASS. All access to the XSD and Jinja
-templates must go through here so the standalone executable can find them.
+Works both from a source checkout and from a PyInstaller onefile bundle,
+where data files are unpacked under sys._MEIPASS. All access to the XSD and
+Jinja templates goes through here so the standalone executable can find them.
 
-The XSD template is package data: it lives at icdgen/schemas/icd-1.0.xsd.template
-(inside the importable package), so a single copy serves source checkouts, pip
-wheels, and PyInstaller bundles alike. It cannot drift.
+The XSD template is package data at icdgen/schemas/icd-1.0.xsd.template, so a
+single copy serves source checkouts, pip wheels, and PyInstaller bundles.
 
-TEMPLATE OVERRIDE (modularity): a program may supply its own Jinja templates
-(e.g. a house-style header.h.j2) by setting $ICDGEN_TEMPLATE_DIR. Because an
-overridden template is a real tool input that changes artifact bytes, the
-template set is hashable via template_manifest(); the CLI records those hashes
-(plus the compiled-XSD hash) in run.log so every invocation's full input set is
-auditable. Identical ICD + identical templates => identical artifacts; a
-template swap is visible in the provenance record instead of silent.
+Template override: a program may supply its own Jinja templates (e.g. a
+house-style header.h.j2) by setting $ICDGEN_TEMPLATE_DIR. An overridden
+template is a tool input that changes artifact bytes, so template_manifest()
+hashes the template set and the CLI records those hashes (plus the
+compiled-XSD hash) in run.log. Identical ICD + identical templates =>
+identical artifacts; a template swap shows up in the provenance record.
 """
 from __future__ import annotations
 
@@ -34,16 +32,15 @@ def _first_existing(*candidates: str) -> str:
 
 
 def xsd_template_path() -> str:
-    """Path to the XSD TEMPLATE (with @SIGNAL_TYPES@/@ENUM_TYPES@ markers).
+    """Path to the XSD template (with @SIGNAL_TYPES@/@ENUM_TYPES@ markers).
 
-    The signal and interface-enum portions are injected from the field registry
-    at load time (see schema_gen.assemble_xsd), so the schema can never drift
-    from the registry.
+    The signal and interface-enum portions are injected from the field
+    registry at load time (schema_gen.assemble_xsd).
 
-    The template is package data shipped at icdgen/schemas/icd-1.0.xsd.template.
-    One physical copy serves every layout: a source checkout and a pip-installed
-    wheel both resolve it next to this module; a PyInstaller bundle unpacks it
-    under sys._MEIPASS/icdgen/schemas/ (see icdgen.spec datas).
+    Package data shipped at icdgen/schemas/icd-1.0.xsd.template. A source
+    checkout and a pip-installed wheel resolve it next to this module; a
+    PyInstaller bundle unpacks it under sys._MEIPASS/icdgen/schemas/ (see
+    icdgen.spec datas).
     """
     here = os.path.dirname(os.path.abspath(__file__))
     candidates = [os.path.join(here, "schemas", "icd-1.0.xsd.template")]
@@ -91,7 +88,7 @@ def template_dir() -> str:
 def template_manifest() -> dict[str, str]:
     """{template filename: SHA-256} for every *.j2 in the resolved template
     dir, sorted by name. Recorded in run.log so an overridden template set is
-    a traceable, auditable input rather than a silent substitution."""
+    a traceable input."""
     d = template_dir()
     out: dict[str, str] = {}
     if not os.path.isdir(d):

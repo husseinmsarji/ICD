@@ -21,13 +21,11 @@ export default function App() {
   const [view, setView] = useState('editor');    // 'editor' | 'reqgen'
   const fileRef = useRef();
 
-  // ---- reqgen editor state LIVES HERE (lifted out of ReqgenPanel) ----
-  // Why: the reqgen panel is only mounted on its own tab. If it owned this
-  // state, switching to the ICD Editor tab would unmount it and React would
-  // discard the draft, preview, trace, and chosen ICD source. Holding it in
-  // App (which never unmounts) makes the panel survive tab switches; the
-  // panel becomes a controlled view over this state. The config FILE is still
-  // the single record of truth — `reqgen` is just an unsaved draft until Save.
+  // Reqgen editor state, lifted out of ReqgenPanel. If the panel owned this
+  // state, unmounting it on a tab switch would discard the draft, preview,
+  // trace, and chosen ICD source. App stays mounted, so the state survives;
+  // the panel is a controlled view over it. The config file remains the
+  // record of truth; `reqgen` is an unsaved draft until Save.
   const [reqgen, setReqgen] = useState({
     meta: null,            // aspect-registry descriptor
     draft: null,           // working config (mutable, unsaved)
@@ -205,10 +203,9 @@ export default function App() {
       </div>
 
       {/*
-        Both views are mounted at once; only the active one is shown. Keeping
-        ReqgenPanel mounted (display:none when inactive) is what preserves the
-        reqgen draft/preview/trace across tab switches — combined with the
-        lifted state above, nothing is lost when the user flips to the editor.
+        Both views stay mounted; the inactive one is display:none. Together
+        with the lifted state above, this preserves the reqgen
+        draft/preview/trace across tab switches.
       */}
       <div className="main">
         <div style={{ display: view === 'editor' ? 'block' : 'none' }}>

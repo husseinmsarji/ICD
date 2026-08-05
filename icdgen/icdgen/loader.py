@@ -1,14 +1,14 @@
 """Input loading, schema validation, and canonical model construction.
 
-Validation has two channels:
-  * FATAL problems raise ValidationError (with a line reference). The file does
-    not load.
-  * NON-FATAL problems are returned as a list of ValidationWarning so a
+Two validation channels:
+  * Fatal problems raise ValidationError (with a line reference); the file
+    does not load.
+  * Non-fatal problems come back as a list of ValidationWarning so a
     partially-complete ICD can still be loaded and finished in the tool.
 
-XML is validated against the (registry-assembled) XSD; JSON against an
-equivalent jsonschema. Both converge on the same IcdModel. The raw input bytes
-are hashed (SHA-256) before parsing so the provenance stamp traces to the exact
+XML is validated against the registry-assembled XSD; JSON against an
+equivalent jsonschema. Both produce the same IcdModel. Raw input bytes are
+hashed (SHA-256) before parsing so the provenance stamp traces to the exact
 authored file.
 """
 from __future__ import annotations
@@ -40,7 +40,7 @@ _C_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 @dataclass
 class ValidationError(Exception):
-    """Raised on a FATAL input validation failure. Carries a line reference."""
+    """Fatal input validation failure. Carries a line reference."""
     message: str
     line: int | None = None
     source: str | None = None
@@ -59,8 +59,8 @@ class ValidationError(Exception):
 
 @dataclass
 class ValidationWarning:
-    """A NON-FATAL issue. The file still loads; the warning is surfaced to the
-    user (CLI/UI) so a partially-complete ICD can be finished in the tool."""
+    """Non-fatal issue. The file still loads; the warning is surfaced in the
+    CLI/UI so a partially-complete ICD can be finished in the tool."""
     message: str
     line: int | None = None
 
@@ -164,8 +164,8 @@ def _model_from_xml(root: etree._Element) -> IcdModel:
 # JSON path
 # --------------------------------------------------------------------------
 def _json_schema() -> dict:
-    """Equivalent constraints to the XSD, expressed for jsonschema. The signal
-    and interface objects are generated from the registries (single source)."""
+    """Same constraints as the XSD, expressed for jsonschema. The signal and
+    interface objects are generated from the field registries."""
     from .schema_gen import json_signal_schema, json_interface_schema
 
     signal = json_signal_schema()
@@ -304,8 +304,9 @@ def _model_from_json(data: dict) -> IcdModel:
 # Cross-field semantic checks (beyond what schema can express)
 # --------------------------------------------------------------------------
 def _semantic_checks(model: IcdModel, source: str) -> list[ValidationWarning]:
-    """FATAL problems raise ValidationError. NON-FATAL problems are returned as
-    a list of ValidationWarning so a partially-complete ICD can still load."""
+    """Fatal problems raise ValidationError. Non-fatal problems are returned
+    as a list of ValidationWarning so a partially-complete ICD can still
+    load."""
     warnings: list[ValidationWarning] = []
 
     # Change-control gate: tickets are expected for any revision past the
@@ -369,7 +370,7 @@ def load(path: str) -> tuple[IcdModel, str, list[ValidationWarning]]:
     """Validate and load an input file. Returns (model, sha256_hex, warnings).
 
     Format is inferred from extension: .json -> JSON, otherwise XML.
-    Raises ValidationError on a FATAL problem; non-fatal issues come back as
+    Raises ValidationError on a fatal problem; non-fatal issues come back as
     the warnings list so partially-complete ICDs can still be loaded.
     """
     file_hash = hash_file(path)

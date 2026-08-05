@@ -69,9 +69,8 @@ def health():
 def options():
     """Enum choices + signal field descriptor for the editor.
 
-    Everything here is derived from the icdgen field registry, so the form and
-    the validator are guaranteed consistent and a new field surfaces in the UI
-    automatically.
+    Derived from the icdgen field registry, so the form stays consistent with
+    the validator and new fields show up in the UI without changes here.
     """
     from icdgen.fields import (
         BUS_TYPES, DAL_LEVELS, DIRECTIONS, DATA_TYPE_NAMES,
@@ -297,11 +296,10 @@ def export_xml(project_id: str):
 # ==========================================================================
 # reqgen config editor
 #
-# The config FILE is the single record of truth and reqgen.config_io.save_config
-# is its only writer. These routes are a thin pass-through to reqgen_service,
-# which never holds its own config state. PUT validates (bright line included)
-# and 400s on a bad draft; preview/trace/reconcile generate in-memory and never
-# write.
+# All config state lives in the config file; reqgen.config_io.save_config is
+# its only writer. These routes pass through to reqgen_service, which keeps no
+# config state of its own. PUT validates (bright line included) and 400s on a
+# bad draft; preview/trace/reconcile generate in-memory and never write.
 # ==========================================================================
 @app.get("/api/reqgen/meta")
 def reqgen_meta():

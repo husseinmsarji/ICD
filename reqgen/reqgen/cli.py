@@ -37,14 +37,14 @@ def _write(path: str, text: str) -> None:
 
 
 def _load_inputs(args):
-    """(model, icd_hash, cfg) or raises SystemExit-style int via caller."""
+    """Return (model, icd_hash, cfg); ValidationError/ConfigError propagate."""
     model, icd_hash, _warns = load(args.icd)
     cfg = ensure_config(args.config)
     return model, icd_hash, cfg
 
 
 def cmd_init(args) -> int:
-    """Drive the config file: write a populated default if it doesn't exist."""
+    """Write a populated default config if none exists, then print a summary."""
     existed = os.path.isfile(args.config)
     cfg = ensure_config(args.config)
     verb = "exists" if existed else "created"

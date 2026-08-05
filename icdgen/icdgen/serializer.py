@@ -1,9 +1,8 @@
 """Serialize an IcdModel back to canonical schema-valid XML.
 
-This is the inverse of loader.py. The form-based editor (and any programmatic
-caller) builds an IcdModel; this turns it into an XML document that re-validates
-against icd-1.0.xsd. Keeping serialization here means there is exactly one
-source of truth for the wire format, shared by the CLI and the web layer.
+Inverse of loader.py. The form-based editor (or any caller) builds an
+IcdModel; this renders it as XML that re-validates against icd-1.0.xsd.
+The CLI and web layer share this serializer.
 
 Determinism: element order and formatting are fixed, so the same model always
 serializes to the same bytes.
@@ -16,11 +15,10 @@ from .model import IcdModel, Interface, Signal
 
 _NS = "urn:icdgen:icd:1.0"
 
-# Escape map covers the attribute-significant quote characters in addition to
-# the default & < >. The same escaper is used for element text and attribute
-# values; escaping quotes in element text is harmless and keeps a single code
-# path, so every emitted value is well-formed regardless of which fields are
-# carried as attributes (e.g. an unconstrained packet name).
+# Adds the quote characters to the default & < > escapes. One escaper for
+# both element text and attribute values; escaping quotes in element text is
+# harmless, and attribute values (e.g. an unconstrained packet name) stay
+# well-formed.
 _ESCAPE_MAP = {'"': "&quot;", "'": "&apos;"}
 
 

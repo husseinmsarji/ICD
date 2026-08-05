@@ -1,12 +1,10 @@
 """Requirements traceability matrix: ICD elements <-> generated requirements.
 
-This is the completeness-evidence artifact for a certification program: one
-row per L3 element (interface/packet) and one row per signal, listing every
-requirement ID that covers it. An element with NO covering requirement (because
-all of its aspects were suppressed, or skipped by applicability rules — e.g. a
-signal with no declared range) is reported as NOT COVERED, so an intentional
-gap is a visible line item to be closed by a human-authored requirement in the
-RM tool, never a silent omission.
+Completeness evidence: one row per L3 element (interface/packet) and one row
+per signal, listing every requirement ID that covers it. An element with no
+covering requirement (all aspects suppressed, or skipped by applicability, e.g.
+a signal with no declared range) is reported as NOT COVERED rather than
+dropped; the gap is then closed by a human-authored requirement in the RM tool.
 
 Joins:
   * (Interface ID, Packet, Signal) is the shared key with icdgen's
@@ -17,7 +15,7 @@ Joins:
     requirements export).
 
 Deterministic: document order, no timestamps, dual-hash (ICD + config)
-provenance in every row, exactly like the requirements export.
+provenance in every row, same as the requirements export.
 """
 from __future__ import annotations
 
@@ -55,8 +53,8 @@ def build_trace_rows(model, reqs) -> list[TraceRow]:
 
     L3 rows are emitted per packet when any requirement carries a packet name,
     plus a per-interface row when port-granularity requirements (blank packet)
-    exist for that interface — so the matrix matches whichever granularity the
-    config used, without re-reading the config.
+    exist for that interface, so the matrix matches whichever granularity the
+    config used without re-reading the config.
     """
     # Index requirements by their structural key.
     by_l3: dict[tuple[str, str], list[str]] = {}

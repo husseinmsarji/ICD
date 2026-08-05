@@ -1,10 +1,10 @@
 """API request/response schemas (Pydantic).
 
 These mirror the icdgen domain model but live separately so the wire contract
-can evolve without touching the core library. Validation here is intentionally
-LOOSE (the authoritative validator is the XSD/jsonschema in icdgen.loader):
-busType is freeform, signalType may be blank, and numeric signal fields are
-optional — so a partially-complete ICD round-trips through the API.
+can evolve without touching the core library. Validation here is loose by
+design; the XSD/jsonschema in icdgen.loader is authoritative. busType is
+freeform, signalType may be blank, and numeric signal fields are optional,
+so a partially-complete ICD round-trips through the API.
 """
 from __future__ import annotations
 

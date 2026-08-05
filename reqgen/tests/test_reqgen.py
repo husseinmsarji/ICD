@@ -43,7 +43,7 @@ def _prov():
     return ReqProvenance.create("a" * 64, "b" * 64)
 
 
-# ---- the config file is DRIVEN by code, not hand-edited ----
+# ---- config file is written by code, not hand-edited ----
 def test_ensure_config_creates_file(tmp_path):
     p = str(tmp_path / "reqgen.json")
     assert not os.path.exists(p)
@@ -119,7 +119,7 @@ def test_granularity_catalog():
 
 
 def test_port_granularity_emits_interface_contract():
-    """Port mode produces one L3 row per INTERFACE with port-contract aspects
+    """Port mode produces one L3 row per interface with port-contract aspects
     (CONNECT/BUS/DAL), not the packet-only EXISTS/RATE."""
     model, _h, _w = load(DEMO)
     cfg = config_from_dict({

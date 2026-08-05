@@ -1,50 +1,41 @@
-"""Requirement-generation config: the schema lives HERE in code (single source
-of truth), and the version-controlled config file is *generated from* this
-schema. You never hand-write the file from scratch; reqgen writes a fully
-populated default, and edits (CLI or UI) round-trip through it.
+"""Requirement-generation config schema.
 
-Design mirrors icdgen's field-registry philosophy: declare the knobs once, derive
-the file, the validation, and the UI descriptor from that one place.
+The schema lives in code; the version-controlled config file is generated from
+it. reqgen writes a fully populated default and edits (CLI or UI) round-trip
+through it. Mirrors icdgen's field registry: declare the knobs once, derive the
+file, the validation, and the UI descriptor from them.
 
-THE BRIGHT LINE (DO-330): templates substitute ONLY ICD field values. They
-transcribe structural facts (type/range/rate/...); they must never encode
-engineering intent. Behavioral requirements stay human-authored in the RM tool.
+Bright line (DO-330): templates substitute only ICD field values. They
+transcribe structural facts (type/range/rate/...) and must not encode
+engineering intent; behavioral requirements stay human-authored in the RM tool.
+Each aspect declares the ICD fields its templates may reference (`fields`). The
+UI and the save path reject any template whose {placeholders} leave that set
+(plus the structural ID tokens), so e.g. a TYPE template cannot reference {dal}.
 
-Each aspect declares the exact ICD fields it is ALLOWED to transcribe (its
-`fields`). The UI and the save path enforce that a template's {placeholders}
-stay within that set (plus the structural ID tokens), so a TYPE requirement can
-never quietly start pulling in, say, {dal} -- that would cross the bright line.
+Applicability (`requires`): fields that must be non-blank in the ICD for the
+requirement to be emitted. A signal with no range must not produce "shall
+represent values in the range [, ]"; a vacuous shall-statement is a
+certification finding. The generator skips the aspect and the trace matrix
+(reqgen trace) reports the element as a coverage gap.
 
-APPLICABILITY (`requires`): each aspect also declares which of its fields must
-be PRESENT (non-blank) in the ICD for the requirement to be emitted. A signal
-with no range must not produce "shall represent values in the range [, ]" -- a
-vacuous shall-statement is a certification finding. The generator skips the
-aspect instead, and the trace matrix (reqgen trace) reports the element as a
-coverage gap so the omission is visible, never silent.
+L3 granularity (`granularity`): the L3 layer can be written at two
+granularities, matching the ICD hierarchy (ARP4754A / standard ICD practice):
 
-L3 GRANULARITY (`granularity`): the L3 layer can be written at two granularities,
-reflecting the ICD hierarchy itself (ARP4754A / standard ICD practice):
+  * "port"   - the interface/port contract between two LRUs: which LRUs it
+               connects, which bus/protocol it conforms to, and the assurance
+               level allocated to it. These are properties of the interface,
+               not of any one message it carries (an ARINC 429 bus has one wire
+               speed; a CAN port has a fixed source and destination).
+  * "packet" - the message/packet layer: which messages the interface provides
+               and how often each is refreshed. Transmit rate is a per-message
+               property (each ARINC 429 label has its own interval even though
+               the bus speed is fixed), so RATE is a packet-level aspect and
+               meaningless for a port.
 
-  * "port"   -- the INTERFACE / PORT contract between two LRUs. An ICD defines,
-                once per interface, the physical+protocol+connectivity facts:
-                which two LRUs it connects, which bus/protocol it conforms to,
-                and the assurance level allocated to it. These are properties of
-                the interface, NOT of any one message it carries. (Example: an
-                ARINC 429 bus has ONE wire speed for the whole bus; a CAN port
-                connects a fixed source and destination.)
-  * "packet" -- the MESSAGE / PACKET layer: which messages the interface
-                provides and how often each is refreshed. A packet's transmit
-                rate is a per-message property (e.g. each ARINC 429 label has
-                its own transmit interval even though the bus speed is fixed),
-                so RATE is a packet-level aspect and is meaningless for a port.
-
-Each L3 aspect therefore declares the granularity/granularities it is valid in.
-The generator only emits an L3 aspect when its granularity matches the active
-`l3_granularity`, so selecting "port" no longer offers RATE (a message concept)
-and selecting "packet" no longer offers the per-interface connectivity aspects.
-L4 (signal) aspects are unaffected by granularity. This keeps every generated
-requirement at the layer where the transcribed fact actually lives -- the kind
-of structural correctness a DER expects in an ICD-derived requirement set.
+Each L3 aspect declares the granularity it is valid at; the generator emits it
+only when that matches the active `l3_granularity`. Port mode excludes RATE,
+packet mode excludes the per-interface connectivity aspects. L4 (signal)
+aspects are unaffected by granularity.
 """
 from __future__ import annotations
 
@@ -62,10 +53,10 @@ GRAN_BOTH = "both"
 
 
 # ---------------------------------------------------------------------------
-# ASPECT REGISTRY -- the catalog of structural requirements reqgen can derive.
-# Each aspect names the ICD field(s) it transcribes and ships a default
-# template. Adding an aspect is a one-entry change here; it then flows to the
-# default config, the resolver, and the UI descriptor.
+# Aspect registry: the structural requirements reqgen can derive. Each aspect
+# names the ICD field(s) it transcribes and ships a default template. Adding an
+# aspect is one entry here; it flows to the default config, the resolver, and
+# the UI descriptor.
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class AspectSpec:
@@ -206,8 +197,8 @@ ID_FORMAT_TOKENS: tuple[str, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# CONFIG MODEL -- the in-memory shape of the config file. Built by code (the
-# default generator below), edited via CLI/UI, serialized to JSON.
+# Config model: the in-memory shape of the config file. Built from defaults,
+# edited via CLI/UI, serialized to JSON.
 # ---------------------------------------------------------------------------
 @dataclass
 class SignalOverride:
@@ -252,20 +243,15 @@ class ReqConfig:
 
 
 def default_config() -> ReqConfig:
-    """A complete, valid config built from the aspect registry. This is what
-    reqgen writes when no config file exists yet -- so the user never starts
-    from a blank file."""
+    """A complete, valid config built from the aspect registry; written when
+    no config file exists yet."""
     return ReqConfig()
 
 
 # ---------------------------------------------------------------------------
-# Bright-line placeholder enforcement.
-#
-# A template may only reference the placeholders its aspect declares. The L3
-# `iface`/`packet`/`bus_type`/`dal`/... and L4 `signal`/... names come from the
-# aspect's `fields`. This is the mechanism that keeps a TYPE requirement from
-# silently transcribing, e.g., {dal}: the field is not in TYPE.fields, so a
-# template using it is rejected (see config_io._validate / the web layer).
+# Bright-line placeholder enforcement: a template may only reference the
+# placeholders its aspect declares in `fields`. Anything else (e.g. {dal} in a
+# TYPE template) is rejected by config_io._validate and the web layer.
 # ---------------------------------------------------------------------------
 import string as _string
 

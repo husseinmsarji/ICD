@@ -3,10 +3,10 @@ import React from 'react';
 // Document metadata + revision history table.
 //
 // Each revision row carries an optional "baseline file" upload (Flow A): the
-// ICD as it was AT that revision. It is read as text and handed up via
-// onPriorFile(revision, content, name); it is NOT saved with the project — it
-// rides along just-in-time with the next Generate call to compute the
-// "Change Summary Report" column for the FOLLOWING revision.
+// ICD as it was at that revision. It is read as text and handed up via
+// onPriorFile(revision, content, name). It is not saved with the project;
+// it is only sent with the next Generate call, to compute the "Change Summary
+// Report" column for the following revision.
 
 export default function MetadataEditor({ meta, onChange, onPriorFile, priorFiles }) {
   const set = (key, value) => onChange({ ...meta, [key]: value });

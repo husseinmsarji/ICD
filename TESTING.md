@@ -7,8 +7,8 @@ core library:
 - **`reqgen/`** — a separate requirement generator that imports icdgen.
 - **`icdweb/`** — a FastAPI + React web app over the core.
 
-> The authoritative architecture map is [`AI_README.md`](AI_README.md). This
-> file is just the "run it and confirm it works" guide.
+Architecture details are in [`AI_README.md`](AI_README.md); this file is the
+"run it and confirm it works" guide.
 
 Prerequisites: **Python 3.10+**, and for the web frontend **Node 18+ / npm**.
 For the container path, **Docker Desktop** (running). All paths below are

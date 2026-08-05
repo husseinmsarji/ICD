@@ -5,10 +5,10 @@ it. It reads an icdgen ICD (the canonical XML/JSON) as a library input and emits
 a requirements module for an RM tool (DOORS / Jama / Polarion / etc.), a
 **requirements-to-signals traceability matrix**, and a reconciliation report. It
 never writes back into the ICD and shares no mutable state with icdgen, so the
-two tools keep **independent DO-330 qualification scopes**.
+two tools keep independent DO-330 qualification scopes.
 
-> The authoritative architecture map is [`../AI_README.md`](../AI_README.md)
-> (see §9.6 on L3 granularity and §9.7 on the trace matrix).
+Architecture is documented in [`../AI_README.md`](../AI_README.md) (§9.6 covers
+L3 granularity, §9.7 the trace matrix).
 
 ## What it does
 
@@ -18,9 +18,9 @@ two tools keep **independent DO-330 qualification scopes**.
    a **stable ID derived from the ICD structure**, so regeneration is idempotent
    and an RM-tool import updates in place.
 3. **`trace`** — ICD + config → a requirements-to-signals traceability matrix
-   plus a coverage summary. This is the **completeness artifact**: any element
-   with no covering requirement shows as a visible gap. `trace` exits **2** on
-   any gap (a CI gate), **1** on input error, **0** when fully covered.
+   plus a coverage summary. Any element with no covering requirement shows as a
+   visible gap, so the matrix doubles as a completeness check. `trace` exits
+   **2** on any gap (a CI gate), **1** on input error, **0** when fully covered.
 4. **`reconcile`** — ICD + config + a prior export → a four-state report
    (added / removed / changed / unchanged) telling you exactly which RM objects
    to create, retire, or update after an ICD or config change.
@@ -54,28 +54,30 @@ or per signal. Precedence: per-signal → per-interface → global → aspect de
 emit (RANGE needs both bounds, TYPE a type, RATE a rate, UNITS units).
 `generate` skips an aspect whose required fields are blank instead of emitting
 "range [, ]"; the skipped element then shows as a trace-matrix gap to close with
-a human-authored requirement. This is what makes the trace matrix a real
-completeness check rather than a rubber stamp.
+a human-authored requirement. That keeps the coverage numbers honest: a gap in
+the matrix means a requirement is actually missing.
 
-**The bright line (DO-330):** templates substitute *only* ICD field values. They
-transcribe structural facts; they never encode engineering intent. Behavioral
-requirements ("when X, signal Y shall be Z") stay human-authored in the RM tool —
-reqgen only links to them by ID.
+**DO-330 scope boundary.** Templates substitute only ICD field values; they
+transcribe structural facts and never encode engineering intent. Behavioral
+requirements ("when X, signal Y shall be Z") are written by hand in the RM tool,
+and reqgen references them by ID.
 
 ## The config drives the file
 
 The config *schema* lives in code (`config_schema.py`). The version-controlled
 config *file* is generated from it (`config_io.ensure_config`) and round-trips
 deterministically (canonical JSON, sorted keys → stable hash). Edits go through
-`save_config`, the only writer — CLI or web UI, always writing the same file,
-enforcing both the bright line and the L3 granularity-consistency rule.
+`save_config`, the only writer. CLI or web UI, it is always the same file, and
+both the template restriction and the L3 granularity-consistency rule are
+enforced there.
 
 ## Provenance
 
 A generated module traces to **three anchors**: the reqgen tool version, the
 SHA-256 of the exact ICD it read, and the SHA-256 of the exact config that drove
-it. Two inputs, both hashed → reproducible from a known ICD + known config. The
-trace matrix carries the same dual hash per row, and shares its join key
+it. Both inputs are hashed, so a module is reproducible from a known ICD and a
+known config. The trace matrix carries the same dual hash per row, and shares
+its join key
 `(Interface ID, Packet, Signal)` with icdgen's traceability matrix, so the two
 CSVs join into end-to-end signal → requirement → LRU/DAL traceability.
 

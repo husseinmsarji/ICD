@@ -1,7 +1,7 @@
 """Immutable domain model for ICD interface definitions.
 
-The model is decoupled from the XML/JSON wire format so generators consume a
-single canonical object. Dataclasses are frozen to reinforce determinism.
+Decoupled from the XML/JSON wire format; generators consume this canonical
+form. Dataclasses are frozen.
 """
 from __future__ import annotations
 

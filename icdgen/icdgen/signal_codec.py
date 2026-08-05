@@ -1,9 +1,8 @@
 """Registry-driven conversion of a Signal to/from XML, JSON, and dicts.
 
-All per-field logic loops over ``SIGNAL_FIELDS`` so that adding a field to the
-registry automatically flows through parsing and serialization with no edits
-here. This is the second half of the "one place to add a field" guarantee
-(``schema_gen`` covers validation; this module covers data movement).
+Per-field logic loops over ``SIGNAL_FIELDS``, so a field added to the registry
+flows through parsing and serialization with no edits here. ``schema_gen``
+covers validation; this module covers data movement.
 
 Coercion rules per ``FieldSpec.py_type``:
   * float -> float(value)
@@ -181,10 +180,10 @@ def interface_from_json_dict(d: dict[str, Any]) -> Interface:
 
 
 # ===========================================================================
-# Packet-level codec. A packet groups signals under a name. It has a `name`
+# Packet-level codec. A packet groups signals under a name: a `name`
 # attribute, an optional `description`, and a <signals> child collection.
-# Packets are structural (fixed shape), so unlike signals/interfaces they are
-# not registry-driven — there is nothing to extend per-field.
+# Fixed shape, so unlike signals/interfaces it is not registry-driven;
+# there is nothing to extend per-field.
 # ===========================================================================
 from .model import Packet  # noqa: E402
 

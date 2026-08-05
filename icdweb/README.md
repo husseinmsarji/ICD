@@ -9,8 +9,8 @@ A form-based web app over the `icdgen` core library. It has **two tabs**:
   see a live requirements preview, view the coverage/traceability matrix, and
   reconcile.
 
-> The authoritative architecture map is [`../AI_README.md`](../AI_README.md)
-> (§10 covers the web layer and tab persistence).
+Architecture is documented in [`../AI_README.md`](../AI_README.md) (§10 covers
+the web layer and tab persistence).
 
 ## Architecture
 

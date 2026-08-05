@@ -1,9 +1,9 @@
 """Derive schema fragments from the field registries.
 
-Both the XSD complexTypes and the JSON Schema objects for *signals* and
-*interfaces* are GENERATED here from the same ``FieldSpec`` registries, so they
-can never drift apart. Generation helpers are generic over a registry plus a
-short ``prefix`` used to name supporting simpleTypes (``Sig`` vs ``If``).
+The XSD complexTypes and JSON Schema objects for signals and interfaces are
+both generated from the ``FieldSpec`` registries. Helpers are generic over a
+registry plus a short ``prefix`` used to name supporting simpleTypes
+(``Sig`` vs ``If``).
 """
 from __future__ import annotations
 

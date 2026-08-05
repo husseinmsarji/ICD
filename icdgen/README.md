@@ -6,13 +6,13 @@ certifiable avionics programs developed under ARP4754A and DO-178C / DO-254.
 A single, schema-validated interface definition file (XML or JSON) is the
 **single source of truth**. From it, `icdgen` generates every downstream
 artifact simultaneously, so an interface change is made once and propagated
-everywhere — preserving traceability and removing the manual, multi-document
+everywhere. That preserves traceability and removes the manual, multi-document
 update step that creates DER audit risk.
 
-> `icdgen` is the core library. Two sibling tools build on it: **`reqgen/`** (a
-> separate requirement generator that imports icdgen) and **`icdweb/`** (a web
-> editor). The authoritative architecture map for all three is
-> [`../AI_README.md`](../AI_README.md).
+`icdgen` is the core library. Two sibling tools build on it: **`reqgen/`** (a
+separate requirement generator that imports icdgen) and **`icdweb/`** (a web
+editor). Architecture for all three is documented in
+[`../AI_README.md`](../AI_README.md).
 
 ## The input model
 
