@@ -14,7 +14,7 @@ authors = [{ name = "Avionics Systems Engineering" }]
 # locked to those that produced the verified deterministic baseline. See
 # requirements.txt and AI_README "Determinism contract" before bumping.
 dependencies = [
-    "lxml==6.0.2",
+    "PyYAML==6.0.1",
     "jsonschema==4.26.0",
     "python-docx==1.2.0",
     "reportlab==4.4.10",
@@ -32,7 +32,8 @@ icdgen = "icdgen.cli:main"
 packages = ["icdgen"]
 
 [tool.setuptools.package-data]
-# The XSD template is the single source of truth for the schema and ships
-# inside the package (icdgen/schemas/), so one copy serves source, wheel, and
-# PyInstaller builds. resources.py resolves it next to the package module.
-icdgen = ["templates/*.j2", "schemas/*.template"]
+# The Jinja2 templates ship inside the package so one copy serves source,
+# wheel, and PyInstaller builds. resources.py resolves them next to the
+# package module. (Validation is schema-generated at load time from the field
+# registry — there is no on-disk schema file to ship.)
+icdgen = ["templates/*.j2"]

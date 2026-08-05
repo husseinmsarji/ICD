@@ -1,12 +1,9 @@
 """Traceability matrix generator.
 
 Emits one row per signal mapping it to its parent interface, packet, LRUs, DAL,
-owning document, change-control ticket, and the input hash. Produced as both CSV
-(deterministic, diffable, the certification primary) and XLSX (review
-convenience). Optional numeric fields render as blank (not "None") when absent.
-
-NOTE (re-baseline): the PR Ticket column was added in 1.6.x; trace-csv and
-trace-xlsx artifact bytes change relative to pre-PR-Ticket baselines.
+owning document, and the input hash. Produced as both CSV (deterministic,
+diffable, the certification primary) and XLSX (review convenience). Optional
+numeric fields render as blank (not "None") when absent.
 """
 from __future__ import annotations
 
@@ -24,8 +21,7 @@ _HEADERS = [
     "Signal", "Packet", "Interface ID", "Interface Name", "Bus Type", "DAL",
     "Source LRU", "Destination LRU", "Owning Document",
     "Signal Type", "Units", "Range Min", "Range Max", "Update Rate (Hz)",
-    "Data Bits", "Xmit Bits", "Xmit Bytes", "Scale", "Offset",
-    "PR Ticket",
+    "Data Bits", "Xmit Bits", "Xmit Bytes", "Scale", "Offset", "PR Ticket",
     "Input SHA-256",
 ]
 
@@ -43,9 +39,7 @@ def _rows(model: IcdModel, prov: Provenance):
             sig.signal_type, sig.units,
             _b(sig.range_min), _b(sig.range_max), _b(sig.update_rate_hz),
             _b(sig.data_bits), _b(sig.xmit_bits), _b(sig.xmit_bytes),
-            sig.scaling, sig.offset,
-            _b(sig.pr_ticket),
-            prov.input_hash,
+            sig.scaling, sig.offset, _b(sig.pr_ticket), prov.input_hash,
         ]
 
 
@@ -74,8 +68,7 @@ def write_xlsx(model: IcdModel, prov: Provenance, path: str) -> None:
     for row in _rows(model, prov):
         ws.append(row)
 
-    widths = [22, 16, 14, 24, 12, 5, 16, 16, 20, 12, 10, 11, 11, 14, 10, 10,
-              11, 8, 8, 12, 30]
+    widths = [22, 16, 14, 24, 12, 5, 16, 16, 20, 12, 10, 11, 11, 14, 10, 10, 11, 8, 8, 30]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"

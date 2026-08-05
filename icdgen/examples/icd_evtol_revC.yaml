@@ -1,0 +1,467 @@
+# eVTOL Integrated Avionics ICD - Revision C (current).
+# Adds the environmental/air-data bus and the motor-telemetry bus; adds a
+# VELOCITY packet to navigation and a CELL_HEALTH packet to the battery bus;
+# widens the torque limit; tightens the yaw-rate range; removes the aggregate
+# bms_fault (superseded by per-cell health). New and modified signals cite the
+# AVS change-control ticket that introduced them. Links Rev B as the prior
+# revision so the Change Summary Report auto-populates.
+# 6 interfaces, 9 packets, 31 signals. Schema-valid against icdgen 1.0.
+schemaVersion: "1.0"
+metadata:
+  documentId: "ICD-EVTOL-AVS-200"
+  documentTitle: "eVTOL Integrated Avionics Interface Control Document"
+  program: "eVTOL-Gen6"
+  revision: "C"
+  revisionDate: "2026-06-01"
+  author: "H. Avionics"
+  revisionHistory:
+    - revision: "A"
+      date: "2026-01-15"
+      author: "H. Avionics"
+      description: "Initial release: navigation position, rotor command, and battery telemetry buses."
+    - revision: "B"
+      date: "2026-03-22"
+      author: "H. Avionics"
+      description: "Added AHRS attitude bus and navigation STATUS packet; widened altitude range; refined rotor scaling; removed state_of_charge."
+    - revision: "C"
+      date: "2026-06-01"
+      author: "H. Avionics"
+      description: "Added environmental air-data and motor-telemetry buses; added VELOCITY and CELL_HEALTH packets; widened torque limit; tightened yaw-rate range; removed bms_fault."
+priorRevisions:
+  - revision: "B"
+    source: "icd_evtol_revB.yaml"
+interfaces:
+  - id: "IF-NAV-STATE"
+    busType: "ARINC664"
+    dal: "A"
+    name: "Navigation State Bus"
+    sourceLru: "NAV-COMPUTER"
+    destinationLru: "FLIGHT-CONTROL-COMPUTER"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Primary navigation solution over AFDX VL-101."
+    packets:
+      - name: "POSITION"
+        description: "Geodetic position at 50 Hz."
+        signals:
+          - name: "latitude"
+            description: "WGS-84 geodetic latitude."
+            signalType: "float64"
+            updateRateHz: 50
+            units: "deg"
+            dataBits: 64
+            xmitBits: 64
+            xmitBytes: 8
+            definition: "Positive north."
+            rangeMin: -90
+            rangeMax: 90
+          - name: "longitude"
+            description: "WGS-84 geodetic longitude."
+            signalType: "float64"
+            updateRateHz: 50
+            units: "deg"
+            dataBits: 64
+            xmitBits: 64
+            xmitBytes: 8
+            definition: "Positive east."
+            rangeMin: -180
+            rangeMax: 180
+          - name: "altitude_msl"
+            description: "Altitude above mean sea level."
+            signalType: "float32"
+            updateRateHz: 50
+            units: "m"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -500
+            rangeMax: 8000
+            prTicket: "AVS-1042"
+      - name: "STATUS"
+        description: "Navigation health and mode."
+        signals:
+          - name: "nav_valid"
+            description: "Solution validity flag."
+            signalType: "bool"
+            updateRateHz: 50
+            units: ""
+            dataBits: 1
+            xmitBits: 1
+            rangeMin: 0
+            rangeMax: 1
+            prTicket: "AVS-1048"
+          - name: "nav_mode"
+            description: "Active navigation mode."
+            signalType: "enum"
+            updateRateHz: 10
+            units: ""
+            dataBits: 3
+            xmitBits: 3
+            definition: "0=GPS,1=INS,2=blended,3=degraded."
+            rangeMin: 0
+            rangeMax: 3
+            prTicket: "AVS-1048"
+      - name: "VELOCITY"
+        description: "NED velocity and ground speed at 50 Hz."
+        signals:
+          - name: "vel_north"
+            description: "North velocity component."
+            signalType: "float32"
+            updateRateHz: 50
+            units: "m/s"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -100
+            rangeMax: 100
+            prTicket: "AVS-1101"
+          - name: "vel_east"
+            description: "East velocity component."
+            signalType: "float32"
+            updateRateHz: 50
+            units: "m/s"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -100
+            rangeMax: 100
+            prTicket: "AVS-1101"
+          - name: "vel_down"
+            description: "Down velocity component, positive descending."
+            signalType: "float32"
+            updateRateHz: 50
+            units: "m/s"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -30
+            rangeMax: 30
+            prTicket: "AVS-1101"
+          - name: "ground_speed"
+            description: "Horizontal ground speed magnitude."
+            signalType: "float32"
+            updateRateHz: 50
+            units: "m/s"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: 0
+            rangeMax: 140
+            prTicket: "AVS-1101"
+  - id: "IF-FCC-MOTOR-CMD"
+    busType: "ARINC429"
+    dal: "A"
+    name: "Motor Command Bus"
+    sourceLru: "FLIGHT-CONTROL-COMPUTER"
+    destinationLru: "MOTOR-CONTROLLER-1"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Per-rotor commands from the FCC."
+    packets:
+      - name: "ROTOR_CMD"
+        description: "Per-rotor commands at 100 Hz."
+        signals:
+          - name: "rotor_speed_cmd"
+            description: "Commanded rotor speed."
+            signalType: "uint16"
+            updateRateHz: 100
+            units: "rpm"
+            dataBits: 16
+            xmitBits: 19
+            xmitBytes: 3
+            scaling: 0.25
+            definition: "0.25 rpm per LSB, BNR (refined resolution)."
+            rangeMin: 0
+            rangeMax: 6000
+            prTicket: "AVS-1051"
+          - name: "torque_limit"
+            description: "Signed torque limit."
+            signalType: "int16"
+            updateRateHz: 100
+            units: "N*m"
+            dataBits: 16
+            xmitBits: 19
+            xmitBytes: 3
+            scaling: 0.1
+            rangeMin: -400
+            rangeMax: 500
+            prTicket: "AVS-1110"
+  - id: "IF-AHRS"
+    busType: "ARINC429"
+    dal: "A"
+    name: "Attitude and Heading Reference Bus"
+    sourceLru: "AHRS-UNIT"
+    destinationLru: "FLIGHT-CONTROL-COMPUTER"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Attitude and body rates at 100 Hz."
+    packets:
+      - name: "ATTITUDE"
+        description: "Euler attitude and body angular rates."
+        signals:
+          - name: "roll"
+            description: "Roll angle, right-wing-down positive."
+            signalType: "float32"
+            updateRateHz: 100
+            units: "deg"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -180
+            rangeMax: 180
+            prTicket: "AVS-1063"
+          - name: "pitch"
+            description: "Pitch angle, nose-up positive."
+            signalType: "float32"
+            updateRateHz: 100
+            units: "deg"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -90
+            rangeMax: 90
+            prTicket: "AVS-1063"
+          - name: "yaw"
+            description: "Heading, true north reference."
+            signalType: "float32"
+            updateRateHz: 100
+            units: "deg"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: 0
+            rangeMax: 360
+            prTicket: "AVS-1063"
+          - name: "roll_rate"
+            description: "Body roll rate."
+            signalType: "float32"
+            updateRateHz: 100
+            units: "deg/s"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -300
+            rangeMax: 300
+            prTicket: "AVS-1063"
+          - name: "pitch_rate"
+            description: "Body pitch rate."
+            signalType: "float32"
+            updateRateHz: 100
+            units: "deg/s"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -300
+            rangeMax: 300
+            prTicket: "AVS-1063"
+          - name: "yaw_rate"
+            description: "Body yaw rate (range tightened to measured envelope)."
+            signalType: "float32"
+            updateRateHz: 100
+            units: "deg/s"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -200
+            rangeMax: 200
+            prTicket: "AVS-1112"
+  - id: "IF-MOTOR-TELEM"
+    busType: "ARINC429"
+    dal: "B"
+    name: "Motor Telemetry Bus"
+    sourceLru: "MOTOR-CONTROLLER-1"
+    destinationLru: "FLIGHT-CONTROL-COMPUTER"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Per-rotor motor feedback telemetry."
+    packets:
+      - name: "MOTOR_TELEMETRY"
+        description: "Motor temperatures, speed feedback, and inverter health."
+        signals:
+          - name: "motor_temp_1"
+            description: "Rotor 1 winding temperature."
+            signalType: "int16"
+            updateRateHz: 20
+            units: "degC"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -40
+            rangeMax: 200
+            prTicket: "AVS-1120"
+          - name: "motor_temp_2"
+            description: "Rotor 2 winding temperature."
+            signalType: "int16"
+            updateRateHz: 20
+            units: "degC"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -40
+            rangeMax: 200
+            prTicket: "AVS-1120"
+          - name: "motor_temp_3"
+            description: "Rotor 3 winding temperature."
+            signalType: "int16"
+            updateRateHz: 20
+            units: "degC"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -40
+            rangeMax: 200
+            prTicket: "AVS-1120"
+          - name: "motor_temp_4"
+            description: "Rotor 4 winding temperature."
+            signalType: "int16"
+            updateRateHz: 20
+            units: "degC"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -40
+            rangeMax: 200
+            prTicket: "AVS-1120"
+          - name: "motor_rpm_fb"
+            description: "Measured rotor speed feedback."
+            signalType: "uint16"
+            updateRateHz: 100
+            units: "rpm"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.25
+            rangeMin: 0
+            rangeMax: 6000
+            prTicket: "AVS-1121"
+          - name: "inverter_temp"
+            description: "Inverter heatsink temperature."
+            signalType: "int16"
+            updateRateHz: 20
+            units: "degC"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -40
+            rangeMax: 150
+            prTicket: "AVS-1121"
+  - id: "IF-ENV"
+    busType: "CAN"
+    dal: "D"
+    name: "Environmental and Air Data Bus"
+    sourceLru: "AIR-DATA-MODULE"
+    destinationLru: "NAV-COMPUTER"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Outside air data, CAN 2.0B."
+    packets:
+      - name: "AIR_DATA"
+        description: "Air temperature, pressure, and barometric altitude."
+        signals:
+          - name: "oat"
+            description: "Outside air temperature."
+            signalType: "int16"
+            updateRateHz: 5
+            units: "degC"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -60
+            rangeMax: 60
+            prTicket: "AVS-1130"
+          - name: "static_pressure"
+            description: "Static pressure."
+            signalType: "uint16"
+            updateRateHz: 5
+            units: "hPa"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: 300
+            rangeMax: 1100
+            prTicket: "AVS-1130"
+          - name: "baro_alt"
+            description: "Barometric altitude (29.92 reference)."
+            signalType: "float32"
+            updateRateHz: 5
+            units: "m"
+            dataBits: 32
+            xmitBits: 32
+            xmitBytes: 4
+            rangeMin: -500
+            rangeMax: 8000
+            prTicket: "AVS-1130"
+  - id: "IF-BMS-CAN"
+    busType: "CAN"
+    dal: "C"
+    name: "Battery Management Bus"
+    sourceLru: "BATTERY-MGMT-SYSTEM"
+    destinationLru: "FLIGHT-CONTROL-COMPUTER"
+    owningDocument: "ICD-EVTOL-AVS-200"
+    description: "Pack-level battery telemetry, CAN 2.0B."
+    packets:
+      - name: "PACK_TELEMETRY"
+        description: "Pack-level telemetry."
+        signals:
+          - name: "pack_voltage"
+            description: "Pack terminal voltage."
+            signalType: "uint16"
+            updateRateHz: 10
+            units: "V"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.01
+            rangeMin: 0
+            rangeMax: 900
+          - name: "pack_current"
+            description: "Pack current, positive on discharge."
+            signalType: "int16"
+            updateRateHz: 10
+            units: "A"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -600
+            rangeMax: 600
+      - name: "CELL_HEALTH"
+        description: "Per-cell health summary (supersedes aggregate fault flag)."
+        signals:
+          - name: "cell_temp_max"
+            description: "Hottest cell temperature."
+            signalType: "int16"
+            updateRateHz: 2
+            units: "degC"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.1
+            rangeMin: -40
+            rangeMax: 120
+            prTicket: "AVS-1142"
+          - name: "cell_volt_min"
+            description: "Lowest cell voltage."
+            signalType: "uint16"
+            updateRateHz: 2
+            units: "V"
+            dataBits: 16
+            xmitBits: 16
+            xmitBytes: 2
+            scaling: 0.001
+            rangeMin: 0
+            rangeMax: 5
+            prTicket: "AVS-1142"
+          - name: "soc_estimate"
+            description: "State-of-charge estimate (replaces removed state_of_charge)."
+            signalType: "uint8"
+            updateRateHz: 1
+            units: "%"
+            dataBits: 8
+            xmitBits: 8
+            xmitBytes: 1
+            rangeMin: 0
+            rangeMax: 100
+            prTicket: "AVS-1142"

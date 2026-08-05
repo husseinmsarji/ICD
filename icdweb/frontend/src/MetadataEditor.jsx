@@ -77,7 +77,7 @@ export default function MetadataEditor({ meta, onChange, onPriorFile, priorFiles
                       <label className="btn ghost sm" style={{ cursor: 'pointer', margin: 0 }}
                         title="Upload the ICD as it was at this revision; the next revision's Change Summary Report is computed from it.">
                         {priorName ? 'Replace file' : 'Choose file'}
-                        <input type="file" accept=".xml,.json" style={{ display: 'none' }}
+                        <input type="file" accept=".yaml,.yml" style={{ display: 'none' }}
                           onChange={(e) => onFile(r.revision, e)} />
                       </label>
                       {priorName ? (

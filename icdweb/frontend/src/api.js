@@ -60,7 +60,7 @@ export const api = {
     req(`/api/projects/${id}/generate`, { method: 'POST', headers: J,
       body: JSON.stringify({ definition, formats, priorFiles: priorFiles || undefined }) }),
   artifactUrl: (id, filename) => `/api/projects/${id}/artifacts/${encodeURIComponent(filename)}`,
-  exportXmlUrl: (id) => `/api/projects/${id}/export.xml`,
+  exportYamlUrl: (id) => `/api/projects/${id}/export.yaml`,
 
   importFile: (file) => {
     const fd = new FormData();
@@ -106,7 +106,7 @@ export const api = {
     req('/api/reqgen/config', { method: 'PUT', headers: J, body: JSON.stringify({ config }) }),
   reqgenPreview: (config, icd) =>
     req('/api/reqgen/preview', { method: 'POST', headers: J,
-      body: JSON.stringify({ config, ...icd }) }),   // icd = {icdProjectId} | {icdXml}
+      body: JSON.stringify({ config, ...icd }) }),   // icd = {icdProjectId} | {icdYaml}
   reqgenReconcile: (config, icd) =>
     req('/api/reqgen/reconcile', { method: 'POST', headers: J,
       body: JSON.stringify({ config, ...icd }) }),

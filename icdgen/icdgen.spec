@@ -1,13 +1,11 @@
 # PyInstaller spec for icdgen.
 #
-# Bundles the XSD schema template and Jinja2 templates as data files. The
-# runtime uses resources.py (xsd_template_path / template_dir) which resolves
-# these whether running from source, an installed wheel, or a PyInstaller
-# onefile bundle (sys._MEIPASS).
+# Bundles the Jinja2 templates as data files. The runtime uses resources.py
+# (template_dir) which resolves them whether running from source, an installed
+# wheel, or a PyInstaller onefile bundle (sys._MEIPASS).
 #
-# The XSD template is package data at icdgen/schemas/icd-1.0.xsd.template — a
-# single physical copy. It is bundled into icdgen/schemas/ inside the frozen
-# tree so resources.xsd_template_path() finds it under sys._MEIPASS.
+# The input ICD is YAML; validation uses a JSON Schema generated at load time
+# from the field registry, so there is no on-disk schema file to bundle.
 #
 # Build:  pyinstaller icdgen.spec
 # Output: dist/icdgen (single-file executable; .exe on Windows)
@@ -28,13 +26,10 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[
-        ('icdgen/schemas/icd-1.0.xsd.template', 'icdgen/schemas'),
         ('icdgen/templates/header.h.j2', 'icdgen/templates'),
         ('icdgen/templates/simulink_bus.m.j2', 'icdgen/templates'),
     ] + _third_party_datas,
-    hiddenimports=[
-        'lxml._elementpath',
-    ] + collect_submodules('openpyxl'),
+    hiddenimports=collect_submodules('openpyxl'),
     hookspath=[],
     runtime_hooks=['pyi_rth_docx.py'],
     excludes=[],

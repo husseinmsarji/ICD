@@ -10,8 +10,8 @@ RUN npm run build          # -> /fe/dist
 FROM python:3.12-slim AS backend
 WORKDIR /app
 
-# System deps: none required at runtime (ReportLab/openpyxl are pure-python or
-# ship wheels; lxml ships manylinux wheels). Kept minimal for image size.
+# System deps: none required at runtime (ReportLab/openpyxl/PyYAML are
+# pure-python or ship manylinux wheels). Kept minimal for image size.
 
 # Install the icdgen core library first (changes least often -> better caching).
 COPY icdgen/ /opt/icdgen/

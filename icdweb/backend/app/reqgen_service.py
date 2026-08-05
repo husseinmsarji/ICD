@@ -1,18 +1,18 @@
 """Service layer for the reqgen config editor (icdweb backend).
 
-The reqgen config file is the sole source of state; `config_io.save_config`
-is its only writer. This module keeps no copy of the config and writes the
-file by no other path.
+reqgen's config FILE is the single record of truth and `config_io.save_config`
+is its ONLY writer. This module is a thin orchestrator over reqgen: it never
+holds its own copy of the config and never writes the file by any other path.
 
 Responsibilities:
   * read the config of record (+ its hash) for the editor to display,
   * validate + save a posted draft (delegates to save_config, which enforces
     the bright-line placeholder rule and rejects bad configs),
-  * preview requirements from a posted (unsaved) draft against a chosen ICD
-    (saved project or just-in-time uploaded XML) without writing,
-  * reconcile a draft's output against the saved config's output so the editor
-    can show the effect of edits before saving,
-  * build the requirements-to-signals traceability matrix from a posted draft
+  * generate a live requirements PREVIEW from a posted (unsaved) draft against a
+    chosen ICD — saved project or just-in-time uploaded YAML — without writing,
+  * reconcile a draft's output against the SAVED config's output so the editor
+    can show "what your edits change" before you commit,
+  * build the requirements-to-signals TRACEABILITY MATRIX from a posted draft
     against a chosen ICD (rows + coverage summary for the UI), and stream it as
     a downloadable CSV.
 
@@ -95,12 +95,11 @@ def _model_from_project(project_id: str):
     return dto_to_model(dto)
 
 
-def _model_from_xml_text(xml_text: str):
-    """Parse uploaded XML/JSON text into an icdgen model via the real loader."""
-    suffix = ".json" if xml_text.lstrip().startswith("{") else ".xml"
-    with tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False,
+def _model_from_yaml_text(yaml_text: str):
+    """Parse uploaded YAML text into an icdgen model via the real loader."""
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False,
                                      encoding="utf-8") as fh:
-        fh.write(xml_text)
+        fh.write(yaml_text)
         tmp = fh.name
     try:
         model, _hash, _warns = load(tmp)
@@ -115,14 +114,14 @@ def _resolve_model(payload: dict):
     pid = payload.get("icdProjectId")
     if pid:
         return _model_from_project(pid), f"project:{pid}"
-    xml = payload.get("icdXml")
-    if xml:
-        return _model_from_xml_text(xml), "upload"
-    raise ValueError("no ICD source: provide icdProjectId or icdXml")
+    yaml_text = payload.get("icdYaml")
+    if yaml_text:
+        return _model_from_yaml_text(yaml_text), "upload"
+    raise ValueError("no ICD source: provide icdProjectId or icdYaml")
 
 
 # --------------------------------------------------------------------------
-# Preview: generate from the posted (unsaved) draft; never writes
+# Preview — generate from the POSTED (unsaved) draft, never write
 # --------------------------------------------------------------------------
 def _reqs_to_rows(reqs) -> list[dict]:
     return [
@@ -137,9 +136,8 @@ def _reqs_to_rows(reqs) -> list[dict]:
 
 def preview(payload: dict) -> dict:
     """Generate requirements from the posted draft config against the chosen
-    ICD. Validates the draft first (placeholder check included) so a bad
-    placeholder cannot crash the preview; a ConfigError comes back as
-    ok=False."""
+    ICD. Validates the draft first (bright line included) so the preview can
+    never crash on a bad placeholder; a ConfigError comes back as ok=False."""
     try:
         cfg = config_from_dict(payload.get("config") or {})
     except ConfigError as exc:
@@ -168,7 +166,7 @@ def preview(payload: dict) -> dict:
 
 
 # --------------------------------------------------------------------------
-# Trace: requirements-to-signals traceability matrix from the posted draft
+# Trace — requirements-to-signals traceability matrix from the posted draft
 # --------------------------------------------------------------------------
 def _trace_rows_to_dicts(rows) -> list[dict]:
     return [
@@ -216,22 +214,22 @@ def trace_csv(payload: dict) -> tuple[str, str]:
     """
     cfg = config_from_dict(payload.get("config") or {})   # raises ConfigError
 
-    # Resolve the model and its ICD hash. For an uploaded file, hash the
-    # uploaded text; for a saved project, hash the canonical serialized XML
+    # Resolve the model AND its ICD hash. For an uploaded file we hash the
+    # uploaded text; for a saved project we hash the canonical serialized YAML
     # (mirrors icd_service.generate()).
     import hashlib
-    from icdgen.serializer import to_xml
+    from icdgen.serializer import to_yaml
 
     pid = payload.get("icdProjectId")
-    xml = payload.get("icdXml")
+    yaml_text = payload.get("icdYaml")
     if pid:
         model = _model_from_project(pid)
-        icd_hash = hashlib.sha256(to_xml(model).encode("utf-8")).hexdigest()
-    elif xml:
-        model = _model_from_xml_text(xml)
-        icd_hash = hashlib.sha256(xml.encode("utf-8")).hexdigest()
+        icd_hash = hashlib.sha256(to_yaml(model).encode("utf-8")).hexdigest()
+    elif yaml_text:
+        model = _model_from_yaml_text(yaml_text)
+        icd_hash = hashlib.sha256(yaml_text.encode("utf-8")).hexdigest()
     else:
-        raise ValueError("no ICD source: provide icdProjectId or icdXml")
+        raise ValueError("no ICD source: provide icdProjectId or icdYaml")
 
     from reqgen.provenance import ReqProvenance
     prov = ReqProvenance.create(icd_hash, config_hash(cfg))
@@ -240,12 +238,12 @@ def trace_csv(payload: dict) -> tuple[str, str]:
 
 
 # --------------------------------------------------------------------------
-# Reconcile: draft output vs saved-config output
+# Reconcile — draft output vs SAVED-config output (impact of your edits)
 # --------------------------------------------------------------------------
 def reconcile(payload: dict) -> dict:
-    """Compare what the posted draft would generate against what the saved
-    config of record generates, for the same ICD. Returns added/removed/changed
-    requirement IDs so the editor can show the impact before saving."""
+    """Compare what the posted draft would generate against what the SAVED
+    config of record generates, for the same ICD. Shows added/removed/changed
+    requirement IDs so the editor can preview the impact before saving."""
     try:
         draft = config_from_dict(payload.get("config") or {})
     except ConfigError as exc:

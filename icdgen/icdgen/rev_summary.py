@@ -1,15 +1,18 @@
-"""Per-revision change summaries for the document revision-history table.
+"""Per-revision change summaries for the document header.
 
-Uses the model's `prior_revisions` mapping (revision letter -> prior source
-file) to diff each revision against its predecessor and build a compact
-summary string per revision. Returns plain data; gen_docx / gen_pdf decide
-how to render it.
+Given the current IcdModel and its `prior_revisions` mapping (revision letter ->
+prior source file), this computes a compact, human-readable change summary for
+each revision by running the existing diff engine against the prior file.
 
-Notes:
-  * Prior-revision sources resolve relative to `base_dir` (the directory of
-    the ICD being generated), so relative paths in the XML work from anywhere.
-  * Missing or unreadable prior files do not raise; the summary degrades to a
-    short note (a draft may reference a file not yet present).
+Design notes:
+  * This module is intentionally standalone and side-effect-light: it loads the
+    referenced prior files, diffs them, and returns plain data. The document
+    generators (gen_docx / gen_pdf) decide how to render it. Swapping the
+    summary wording or adding a new line item is a one-function edit here.
+  * Prior-revision sources are resolved relative to `base_dir` (the directory of
+    the ICD being generated) so a relative path in the YAML works from anywhere.
+  * Missing/unreadable prior files never raise: the summary degrades to a short
+    note so generation is robust (a draft may reference a file not yet present).
 """
 from __future__ import annotations
 
@@ -59,7 +62,7 @@ def _counts_line(res) -> list[str]:
 
 
 def _detail_lines(res, limit: int = 12) -> list[str]:
-    """Itemized changes, capped so the table cell stays compact."""
+    """Itemized changes, capped so the header stays compact."""
     items: list[str] = []
     for iid, pkt, s in res.added_signals:
         items.append(f"+ {iid}/{pkt}.{s}")
@@ -120,7 +123,7 @@ def _pr_grouped_lines(res, old_model, new_model) -> list[str]:
         sig = new_sig.get(key)
         # pr_ticket is the attribution mechanism, not a reportable interface
         # change: drop it from the listed fields, and skip the signal entirely
-        # if the ticket was the only thing that changed.
+        # if the ticket was the ONLY thing that changed.
         fields = [c.field for c in sc.changes if c.field != "pr_ticket"]
         if not fields:
             continue
