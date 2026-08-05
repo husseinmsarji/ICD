@@ -298,8 +298,9 @@ def export_xml(project_id: str):
 #
 # All config state lives in the config file; reqgen.config_io.save_config is
 # its only writer. These routes pass through to reqgen_service, which keeps no
-# config state of its own. PUT validates (bright line included) and 400s on a
-# bad draft; preview/trace/reconcile generate in-memory and never write.
+# config state of its own. PUT validates the draft (placeholder restriction
+# included) and 400s on a bad one; preview/trace/reconcile generate in-memory
+# and never write.
 # ==========================================================================
 @app.get("/api/reqgen/meta")
 def reqgen_meta():

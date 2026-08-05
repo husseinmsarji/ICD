@@ -7,8 +7,8 @@ the canonical output (sorted keys, fixed separators) keeps the config hash
 stable.
 
 `save_config` is the only writer, so `_validate` enforces the rules:
-  * bright line: every template (global, per-interface, per-signal) may
-    reference only the placeholders its aspect declares;
+  * template placeholders: every template (global, per-interface, per-signal)
+    may reference only the placeholders its aspect declares;
   * L3 granularity consistency: an L3 aspect in the enabled set (or an
     interface override) must be valid at the configured l3_granularity. A
     "port" config may not enable a packet-only aspect like RATE, and a "packet"
@@ -33,7 +33,8 @@ from .config_schema import (
 
 class ConfigError(Exception):
     """Fatal problem with the config file (bad granularity, unknown aspect,
-    a granularity mismatch, or a template that crosses the bright line)."""
+    a granularity mismatch, or a template using placeholders outside its
+    aspect's field set)."""
 
 
 def _canonical_json(cfg: ReqConfig) -> str:
@@ -57,7 +58,7 @@ def _check_template(aspect_key: str, template: str, where: str) -> None:
             f"{where}: template for aspect '{aspect_key}' uses placeholder(s) "
             f"{shown} that are not allowed for this aspect. Allowed: "
             f"{allowed or '(none)'}. A requirement may only transcribe its own "
-            f"aspect's ICD fields (bright line).")
+            f"aspect's ICD fields.")
 
 
 def _check_id_format(fmt: str, where: str) -> None:

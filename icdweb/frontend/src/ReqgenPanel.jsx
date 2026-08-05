@@ -3,7 +3,7 @@ import { api } from './api.js';
 
 // reqgen config editor: an editor over reqgen/config/reqgen.json.
 //
-// The config file is the single record of truth. This component holds only a
+// The config file is the source of truth. This component holds only a
 // transient draft; Save writes through the backend save_config, the single
 // writer. Nothing else persists state.
 //
@@ -17,9 +17,9 @@ import { api } from './api.js';
 // descriptor), the same way the ICD form builds from the field registry, so a
 // new aspect in config_schema.py appears here with no change to this file.
 //
-// Bright line: a template may use only its aspect's declared fields as
-// {placeholders}. Checked client-side for instant feedback and re-checked by
-// the backend on save (400); both must agree.
+// A template may use only its aspect's declared fields as {placeholders}.
+// Checked client-side for instant feedback and re-checked by the backend on
+// save (400); both must agree.
 
 // Extract {placeholder} base names from a template (mirrors the server parser:
 // base name before any .attr / [idx]). Bare {} -> '' so we can flag it.

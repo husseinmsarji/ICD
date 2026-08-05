@@ -5,7 +5,7 @@ it. reqgen writes a fully populated default and edits (CLI or UI) round-trip
 through it. Mirrors icdgen's field registry: declare the knobs once, derive the
 file, the validation, and the UI descriptor from them.
 
-Bright line (DO-330): templates substitute only ICD field values. They
+DO-330 scope boundary: templates substitute only ICD field values. They
 transcribe structural facts (type/range/rate/...) and must not encode
 engineering intent; behavioral requirements stay human-authored in the RM tool.
 Each aspect declares the ICD fields its templates may reference (`fields`). The

@@ -32,7 +32,7 @@ FastAPI backend  ── service layer ──►  icdgen core library  (loader, g
   the API DTOs (incl. `prTicket` and `PriorRevisionDTO`); `service.py`
   orchestrates validate/generate/diff and persists ICD projects (the only file
   touching ICD-project storage); `reqgen_service.py` orchestrates reqgen (it
-  never holds config state — the file is the record of truth); `main.py` is just
+  never holds config state; the file is the source of truth); `main.py` is just
   routing.
 - **Frontend (`icdweb/frontend/`)** is React. The form builds all its inputs
   from the registry descriptors served by `/api/meta/options`, then round-trips

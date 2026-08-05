@@ -137,8 +137,9 @@ def _reqs_to_rows(reqs) -> list[dict]:
 
 def preview(payload: dict) -> dict:
     """Generate requirements from the posted draft config against the chosen
-    ICD. Validates the draft first (bright line included) so a bad placeholder
-    cannot crash the preview; a ConfigError comes back as ok=False."""
+    ICD. Validates the draft first (placeholder check included) so a bad
+    placeholder cannot crash the preview; a ConfigError comes back as
+    ok=False."""
     try:
         cfg = config_from_dict(payload.get("config") or {})
     except ConfigError as exc:

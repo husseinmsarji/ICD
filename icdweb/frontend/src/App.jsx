@@ -25,7 +25,7 @@ export default function App() {
   // state, unmounting it on a tab switch would discard the draft, preview,
   // trace, and chosen ICD source. App stays mounted, so the state survives;
   // the panel is a controlled view over it. The config file remains the
-  // record of truth; `reqgen` is an unsaved draft until Save.
+  // source of truth; `reqgen` is an unsaved draft until Save.
   const [reqgen, setReqgen] = useState({
     meta: null,            // aspect-registry descriptor
     draft: null,           // working config (mutable, unsaved)
@@ -262,7 +262,7 @@ export default function App() {
 
       <div className="statusbar">
         {view === 'reqgen' ? (
-          <span className="muted">REQGEN · config editor · the file is the single source of truth</span>
+          <span className="muted">REQGEN · config editor · reqgen/config/reqgen.json</span>
         ) : definition ? (
           <>
             <span>{definition.metadata.documentId}</span>

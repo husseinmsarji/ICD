@@ -144,7 +144,7 @@ PyInstaller bundle (`sys._MEIPASS`).
 
 ```
 icdgen/
-  fields.py              SINGLE SOURCE OF TRUTH: signal + interface field registry
+  fields.py              signal + interface field registry (single source of truth)
   schema_gen.py          derives the XSD + JSON Schema from the registries
   signal_codec.py        registry-driven Signal/Interface + structural Packet codecs
   model.py               frozen dataclasses (Interface -> Packet -> Signal, PriorRevision)

@@ -98,8 +98,8 @@ export const api = {
   },
 
   // ---- reqgen config editor ----
-  // The config file is the single record of truth; these mirror it. `saveReqgenConfig`
-  // is the only mutating call and the backend rejects (400) a bright-line violation.
+  // The config file is the source of truth; these mirror it. `saveReqgenConfig`
+  // is the only mutating call; the backend rejects (400) disallowed placeholders.
   reqgenMeta: () => req('/api/reqgen/meta'),
   reqgenConfig: () => req('/api/reqgen/config'),
   saveReqgenConfig: (config) =>
