@@ -27,7 +27,8 @@ No open blocking issues. The two historical section-0 items are resolved:
   uses revC/revB and asserts `+vel_north` / `AVS-1101`), and
   `reqgen/tests/test_reqgen.py` (revC/revB, 6 if / 9 pkt / 31 sig). NOTE: revC
   has 9 packets (count corrected from a stale 8 in the prior test/README; the
-  example XML header comment still says 8 and should be fixed).
+  example XML header comments now state the correct counts — revB 16 sig, revC
+  9 pkt / 31 sig).
 
 Recently delivered (no version bump): a **granularity-aware L3 aspect model**
 (port/interface-contract aspects vs packet/message aspects, section 9.6), the
@@ -36,6 +37,18 @@ on-screen coverage), the icdgen `--strict` release gate, the
 `ICDGEN_TEMPLATE_DIR` override with run.log provenance closure, the PR Ticket
 traceability column, the C-header/Simulink sanitizers, and the prior-file
 path-traversal guard. Details in sections 1, 9.6, 10, 15, 16.
+
+**Doc refresh + trace-matrix bug fix (no version bump).** The PR Ticket
+traceability column was found implemented only in a *misplaced* copy at
+`reqgen/reqgen/gen_trace.py` — inert there (wrong package: it used icdgen-only
+relative imports) — while the live `icdgen/icdgen/gen_trace.py` never received
+it, so `test_pr_ticket_in_traceability` was **failing**. The column was ported
+into the live file (header + row + width + docstring) and the orphan deleted;
+the core suite is green again (36 passed). Trace-csv/xlsx bytes change vs any
+pre-PR-Ticket baseline (the section 11 re-baseline note now genuinely applies).
+Separately, the four stale docs (`TESTING.md`, `icdgen/README.md`,
+`reqgen/README.md`, `icdweb/README.md`) were rewritten to the current 1.6.0
+state, and the revB/revC example XML header comments were corrected.
 
 ---
 
@@ -134,7 +147,7 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 ```
 <repo root>/
 ├── AI_README.md                  ← this file
-├── TESTING.md                    (frozen at v1.2.0-era content; see section 14)
+├── TESTING.md                    (run/verify walkthrough, current at 1.6.0)
 ├── .dockerignore
 │
 ├── icdgen/                       ← CORE library + CLI (pip-installable)
@@ -143,7 +156,7 @@ evidence. Domain: certifiable avionics ICDs under ARP4754A / DO-178C / DO-254.
 │   ├── icdgen.spec               PyInstaller build spec (bundles the package
 │   │                             copy of the XSD template)
 │   ├── run.py / pyi_rth_docx.py  PyInstaller entry + runtime hook
-│   ├── README.md                 (stale v1.2.0-era paths; see section 14)
+│   ├── README.md                 (current at 1.6.0)
 │   ├── examples/
 │   │   ├── icd_evtol_revA.xml          initial release (3 if / 3 pkt / 9 sig)
 │   │   ├── icd_evtol_revB.xml          adds AHRS bus (4 if / 5 pkt / 16 sig);
@@ -551,13 +564,13 @@ bytes are unchanged — but re-verify across all artifacts after merging.
 ## 13. Build / run / test quick reference
 
 - **Install (core):** `pip install -e ./icdgen`
-- **Core tests:** `cd icdgen && python -m pytest tests/ -q`
+- **Core tests (36):** `cd icdgen && python -m pytest tests/ -q`
   (targets the eVTOL examples; `test_pr_ticket_in_traceability` checks the PR
   Ticket column.)
 - **Backend tests (9):**
   `cd icdweb/backend && ICDGEN_DATA_DIR=/tmp/t python -m pytest tests/ -q`
   (includes `test_prior_file_revision_key_cannot_escape_output_dir`.)
-- **reqgen tests (~22):**
+- **reqgen tests (25):**
   `cd icdgen && PYTHONPATH=../reqgen python -m pytest ../reqgen/tests/ -q`
   (includes the applicability test, the L3 port/packet granularity tests,
   and the trace-matrix tests.)
@@ -611,11 +624,6 @@ Jinja override), `REQGEN_CONFIG` (optional config-of-record path).
   detection yet).
 - **`diff.py` pr_ticket-only modifications:** counted in the Flow B PDF while
   Flow A's summary suppresses them; a shared policy flag would unify them.
-- **Example XML header comments overstate counts** (revB comment says 18 sigs,
-  actual 16; revC says 33, actual 31) — fix the comments; the code counts are
-  correct.
-- **`TESTING.md` and `icdgen/README.md` are frozen at v1.2.0-era content**
-  (icd_demo paths, wrong counts, `schemas/icd-1.0.xsd` path) — rewrite.
 - **JSON date parity:** XML validates `revisionDate`/`date` as `xs:date`; the
   JSON path accepts any string.
 - **`gen_pdf._REL_WIDTH`** has no `pr_ticket` entry (silently defaults 1.0);
@@ -684,10 +692,8 @@ matrix, and a reconciliation report. Never writes to the ICD.
    to the qualification Tool Operational Requirements.
 5. **ReqIF / tool-specific reqgen exporter** — blocked on naming the target RM
    tool (DOORS / Jama / Polarion / etc.).
-6. **Fix the doc debt:** rewrite `TESTING.md` and `icdgen/README.md`; correct
-   the revB/revC example XML header comment counts (16 and 31).
-7. **Unify the hash-semantics policy** (raw bytes vs canonical XML) across the
+6. **Unify the hash-semantics policy** (raw bytes vs canonical XML) across the
    CLI diff and the web paths, and document it.
-8. **Optional:** fold the template-set hash into `Provenance.footer_line()` at
+7. **Optional:** fold the template-set hash into `Provenance.footer_line()` at
    the next major re-baseline (tri-hash stamp, symmetric with reqgen's dual
    hash); add move detection to `diff.py`.

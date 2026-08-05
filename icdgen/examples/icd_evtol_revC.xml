@@ -7,7 +7,7 @@
   bms_fault (superseded by per-cell health). New and modified signals cite the
   AVS change-control ticket that introduced them. Links Rev B as the prior
   revision so the Change Summary Report auto-populates.
-  6 interfaces, 8 packets, 33 signals. Schema-valid against urn:icdgen:icd:1.0.
+  6 interfaces, 9 packets, 31 signals. Schema-valid against urn:icdgen:icd:1.0.
 -->
 <icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">
   <metadata>

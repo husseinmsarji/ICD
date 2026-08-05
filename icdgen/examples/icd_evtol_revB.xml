@@ -6,7 +6,7 @@
   (superseded by a dedicated cell-health packet planned for Rev C). New and
   modified signals cite the AVS change-control ticket that introduced them.
   Links Rev A as the prior revision so the Change Summary Report auto-populates.
-  4 interfaces, 5 packets, 18 signals. Schema-valid against urn:icdgen:icd:1.0.
+  4 interfaces, 5 packets, 16 signals. Schema-valid against urn:icdgen:icd:1.0.
 -->
 <icd xmlns="urn:icdgen:icd:1.0" schemaVersion="1.0">
   <metadata>
